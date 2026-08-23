@@ -11,9 +11,11 @@ export default async function SecurityPage() {
     redirect("/login");
   }
 
+  const email = session.user.email;
+
   const user = await prisma.user.findUnique({
     where: {
-      email: session.user.email,
+      email,
     },
   });
 
@@ -25,7 +27,7 @@ export default async function SecurityPage() {
   let secret: string | null = null;
 
   if (!user.twoFactorEnabled) {
-    const setup = await createTwoFactorSetup(user.email);
+    const setup = await createTwoFactorSetup(email);
 
     qrCodeDataUrl = await QRCode.toDataURL(setup.uri);
     secret = setup.secret;
@@ -34,18 +36,20 @@ export default async function SecurityPage() {
   return (
     <main className="min-h-screen p-10">
       <div className="mx-auto max-w-xl rounded-2xl bg-white p-8 shadow">
+
         <h1 className="text-3xl font-bold">
           Two-Factor Authentication
         </h1>
 
         {user.twoFactorEnabled ? (
           <div className="mt-6">
-            <p className="text-green-600 font-semibold">
+            <p className="font-semibold text-green-600">
               Two-factor authentication is enabled.
             </p>
           </div>
         ) : (
           <div className="mt-6">
+
             <p className="text-gray-600">
               Scan this QR code using Google Authenticator
               or another authenticator app.
@@ -63,17 +67,21 @@ export default async function SecurityPage() {
 
             {secret && (
               <div className="mt-6">
+
                 <p className="text-sm text-gray-500">
                   Manual setup key
                 </p>
 
-                <code className="mt-2 block rounded bg-gray-100 p-3 break-all">
+                <code className="mt-2 block break-all rounded bg-gray-100 p-3">
                   {secret}
                 </code>
+
               </div>
             )}
+
           </div>
         )}
+
       </div>
     </main>
   );

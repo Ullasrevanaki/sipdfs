@@ -19,9 +19,11 @@ export default async function TwoFactorPage({
     redirect("/login");
   }
 
+  const email = session.user.email;
+
   const user = await prisma.user.findUnique({
     where: {
-      email: session.user.email,
+      email,
     },
   });
 
@@ -36,23 +38,23 @@ export default async function TwoFactorPage({
    * If 2FA is already enabled, normally send the user
    * back to the dashboard.
    *
-   * But /2fa?reset=1 allows the user to set up a
-   * new authenticator after losing the old one.
+   * /2fa?reset=1 allows the user to configure
+   * a new authenticator.
    */
   if (user.twoFactorEnabled && !reset) {
     redirect("/dashboard");
   }
 
-  let secret = user.twoFactorSecret;
+  let secret: string;
 
   /*
-   * Generate a NEW secret when:
+   * Generate a new secret when:
    *
    * 1. There is no existing secret
    * OR
-   * 2. User explicitly requested a reset
+   * 2. User explicitly requested a reset.
    */
-  if (!secret || reset) {
+  if (!user.twoFactorSecret || reset) {
     secret = generateSecret();
 
     await prisma.user.update({
@@ -64,11 +66,13 @@ export default async function TwoFactorPage({
         twoFactorEnabled: false,
       },
     });
+  } else {
+    secret = user.twoFactorSecret;
   }
 
   const otpAuthUrl = generateURI({
     issuer: "SIPDFS",
-    label: user.email,
+    label: email,
     secret,
   });
 
