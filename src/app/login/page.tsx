@@ -1,11 +1,11 @@
-import { signIn } from "@/auth";
+﻿import { signIn } from "@/auth";
 
 export default function LoginPage() {
   async function handleGoogleLogin() {
     "use server";
 
     await signIn("google", {
-      redirectTo: "/dashboard",
+      redirectTo: "/onboarding",
     });
   }
 
@@ -47,28 +47,21 @@ export default function LoginPage() {
 
           <div className="rounded-[16px] bg-[#f7f9fc] p-6">
             <div className="flex gap-4">
-              <div className="text-2xl">🔐</div>
+              <div className="text-2xl">🔒</div>
 
               <div>
-                <h2 className="text-lg font-bold text-[#111827]">
-                  Two-step authentication
+                <h2 className="font-bold text-[#0f172a]">
+                  Secure Store Access
                 </h2>
 
-                <p className="mt-2 text-base leading-7 text-[#54708f]">
-                  Your account will be protected with Google Sign-In and a
-                  6-digit authenticator code.
+                <p className="mt-2 text-sm leading-6 text-[#60789b]">
+                  Sign in securely to manage your store inventory,
+                  sales, purchases, forecasts and business insights.
                 </p>
               </div>
             </div>
           </div>
         </div>
-
-        <a
-          href="/"
-          className="mt-10 text-base text-[#54708f] transition hover:text-[#111827]"
-        >
-          ← Back to Home
-        </a>
       </section>
     </main>
   );
