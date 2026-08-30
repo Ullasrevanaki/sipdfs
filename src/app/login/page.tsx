@@ -5,7 +5,7 @@ export default function LoginPage() {
     "use server";
 
     await signIn("google", {
-      redirectTo: "/onboarding",
+      redirectTo: "/dashboard",
     });
   }
 
@@ -39,9 +39,11 @@ export default function LoginPage() {
 
           <div className="my-9 flex items-center gap-5">
             <div className="h-px flex-1 bg-[#d7e0eb]" />
+
             <span className="text-sm font-medium text-[#8aa0bf]">
               SECURE LOGIN
             </span>
+
             <div className="h-px flex-1 bg-[#d7e0eb]" />
           </div>
 

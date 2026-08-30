@@ -17,9 +17,10 @@ model User {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   emailVerified    DateTime?
-  accounts         Account[]
-  sessions         Session[]
-  store            Store?
+
+  accounts Account[]
+  sessions Session[]
+  store    Store?
 }
 
 model Account {
@@ -35,7 +36,8 @@ model Account {
   scope             String?
   id_token          String?
   session_state     String?
-  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
 }
@@ -45,7 +47,8 @@ model Session {
   userId       String
   expires      DateTime
   id           String   @id @default(cuid())
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model VerificationToken {
@@ -62,5 +65,119 @@ model Store {
   ownerId   String   @unique
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  owner     User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  products               Product[]
+  reorderRecommendations ReorderRecommendation[]
+  stockAlerts            StockAlert[]
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+}
+
+model Product {
+  id           String   @id @default(cuid())
+  storeId      String
+  name         String
+  category     String?
+  unit         String
+  costPrice    Decimal  @db.Decimal(10, 2)
+  sellingPrice Decimal  @db.Decimal(10, 2)
+  currentStock Decimal  @default(0) @db.Decimal(10, 2)
+  minimumStock Decimal  @default(0) @db.Decimal(10, 2)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  store                  Store                   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  inventoryTransactions  InventoryTransaction[]
+  reorderRecommendations ReorderRecommendation[]
+  stockAlerts            StockAlert[]
+
+  @@index([storeId])
+  @@index([storeId, name])
+}
+
+enum InventoryTransactionType {
+  PURCHASE
+  SALE
+  ADJUSTMENT
+  RETURN
+}
+
+model InventoryTransaction {
+  id        String                   @id @default(cuid())
+  storeId   String?
+  productId String
+  type      InventoryTransactionType
+
+  quantity     Decimal  @db.Decimal(10, 2)
+  unit         String?
+  sellingPrice Decimal? @db.Decimal(10, 2)
+
+  soldAt    DateTime? @default(now())
+  note      String?
+  createdAt DateTime  @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([productId, createdAt])
+  @@index([storeId])
+  @@index([storeId, type])
+  @@index([productId, type])
+  @@index([productId, soldAt])
+}
+
+model ReorderRecommendation {
+  id        String @id @default(cuid())
+  storeId   String
+  productId String
+
+  recommendedQuantity Decimal @db.Decimal(10, 2)
+  targetStock         Decimal @db.Decimal(10, 2)
+  currentStock        Decimal @db.Decimal(10, 2)
+
+  priority String
+  decision String
+  reason   String?
+
+  forecastDemand Decimal? @db.Decimal(10, 2)
+  safetyStock    Decimal? @db.Decimal(10, 2)
+
+  status String @default("ACTIVE")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@index([storeId, productId])
+  @@index([storeId, status])
+  @@index([productId])
+}
+
+model StockAlert {
+  id        String @id @default(cuid())
+  storeId   String
+  productId String
+
+  alertType String
+  severity  String
+
+  currentStock Decimal @db.Decimal(10, 2)
+  minimumStock Decimal @db.Decimal(10, 2)
+
+  message String
+  status  String @default("ACTIVE")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store   Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@index([storeId, productId])
+  @@index([storeId, status])
+  @@index([productId])
 }

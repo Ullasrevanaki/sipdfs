@@ -1,29 +1,65 @@
 "use client";
 
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 const navigation = [
-  "Dashboard",
-  "Products",
-  "Sales",
-  "Purchases",
-  "Inventory",
-  "Forecast",
-  "Alerts",
-  "Reports",
-  "Settings",
+  {
+    name: "Dashboard",
+    href: "/dashboard",
+  },
+  {
+    name: "Import Data",
+    href: "/dashboard/import",
+  },
+  {
+    name: "Products",
+    href: "/dashboard/products",
+  },
+  {
+    name: "Sales",
+    href: "/dashboard/sales",
+  },
+  {
+    name: "Purchases",
+    href: "/dashboard/purchases",
+  },
+  {
+    name: "Inventory",
+    href: "/dashboard/inventory",
+  },
+  {
+    name: "Forecast",
+    href: "/dashboard/forecast",
+  },
+  {
+    name: "Alerts",
+    href: "/dashboard/alerts",
+  },
+  {
+    name: "Reports",
+    href: "/dashboard/reports",
+  },
+  {
+    name: "Settings",
+    href: "/dashboard/settings",
+  },
 ];
 
 export default function AppShell({
   storeName,
   userName,
   userEmail,
+  children,
 }: {
   storeName: string;
   userName: string;
   userEmail: string;
+  children?: React.ReactNode;
 }) {
-  const [activePage, setActivePage] = useState("Dashboard");
+  const pathname = usePathname();
+
   const [darkMode, setDarkMode] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
@@ -58,7 +94,7 @@ export default function AppShell({
             🔔
           </button>
 
-          {/* Dark / Bright Mode */}
+          {/* Theme */}
           <button
             type="button"
             onClick={() => setDarkMode(!darkMode)}
@@ -98,8 +134,8 @@ export default function AppShell({
                     : "border-gray-200 bg-white"
                 }`}
               >
-                {/* User information */}
                 <div className="border-b pb-4">
+
                   <p
                     className={`font-semibold ${
                       darkMode
@@ -129,9 +165,9 @@ export default function AppShell({
                   >
                     {storeName}
                   </p>
+
                 </div>
 
-                {/* Logout */}
                 <form
                   action="/api/auth/logout"
                   method="POST"
@@ -150,6 +186,7 @@ export default function AppShell({
                 </form>
               </div>
             )}
+
           </div>
         </div>
       </header>
@@ -166,25 +203,35 @@ export default function AppShell({
         >
           <nav className="p-4">
             <ul className="space-y-1">
-              {navigation.map((item) => (
-                <li key={item}>
-                  <button
-                    type="button"
-                    onClick={() => setActivePage(item)}
-                    className={`w-full rounded-lg px-4 py-3 text-left text-sm font-medium transition ${
-                      activePage === item
-                        ? darkMode
-                          ? "bg-white text-gray-900"
-                          : "bg-gray-900 text-white"
-                        : darkMode
-                        ? "text-gray-300 hover:bg-gray-800 hover:text-white"
-                        : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-                    }`}
-                  >
-                    {item}
-                  </button>
-                </li>
-              ))}
+
+              {navigation.map((item) => {
+                const isActive =
+                  item.href === "/dashboard"
+                    ? pathname === "/dashboard"
+                    : pathname.startsWith(item.href);
+
+                return (
+                  <li key={item.href}>
+
+                    <Link
+                      href={item.href}
+                      className={`block w-full rounded-lg px-4 py-3 text-left text-sm font-medium transition ${
+                        isActive
+                          ? darkMode
+                            ? "bg-white text-gray-900"
+                            : "bg-gray-900 text-white"
+                          : darkMode
+                          ? "text-gray-300 hover:bg-gray-800 hover:text-white"
+                          : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                      }`}
+                    >
+                      {item.name}
+                    </Link>
+
+                  </li>
+                );
+              })}
+
             </ul>
           </nav>
         </aside>
@@ -192,132 +239,11 @@ export default function AppShell({
         {/* MAIN CONTENT */}
         <main className="flex-1 p-8">
           <div className="mx-auto max-w-7xl">
-
-            {/* PAGE TITLE */}
-            <h1 className="text-3xl font-semibold">
-              {activePage}
-            </h1>
-
-            {/* STORE NAME */}
-            {activePage === "Dashboard" && (
-              <p
-                className={`mt-1 text-sm font-medium ${
-                  darkMode
-                    ? "text-gray-300"
-                    : "text-gray-600"
-                }`}
-              >
-                {storeName}
-              </p>
-            )}
-
-            {/* DESCRIPTION */}
-            <p
-              className={`mt-2 ${
-                darkMode
-                  ? "text-gray-400"
-                  : "text-gray-500"
-              }`}
-            >
-              {activePage === "Dashboard"
-                ? "Overview of your store inventory and operations."
-                : `${activePage} module`}
-            </p>
-
-            {/* DASHBOARD CARDS */}
-            {activePage === "Dashboard" && (
-              <div className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-
-                <DashboardCard
-                  title="Total Products"
-                  value="—"
-                  darkMode={darkMode}
-                />
-
-                <DashboardCard
-                  title="Current Stock"
-                  value="—"
-                  darkMode={darkMode}
-                />
-
-                <DashboardCard
-                  title="Low Stock"
-                  value="—"
-                  darkMode={darkMode}
-                />
-
-                <DashboardCard
-                  title="Stock-out Risk"
-                  value="—"
-                  darkMode={darkMode}
-                />
-
-              </div>
-            )}
-
-            {/* MODULE PLACEHOLDER */}
-            {activePage !== "Dashboard" && (
-              <div
-                className={`mt-8 rounded-xl border p-8 ${
-                  darkMode
-                    ? "border-gray-800 bg-[#111827]"
-                    : "border-gray-200 bg-white"
-                }`}
-              >
-                <h2 className="text-xl font-semibold">
-                  {activePage}
-                </h2>
-
-                <p
-                  className={`mt-2 ${
-                    darkMode
-                      ? "text-gray-400"
-                      : "text-gray-500"
-                  }`}
-                >
-                  This module will be implemented in the next
-                  development layer.
-                </p>
-              </div>
-            )}
-
+            {children}
           </div>
         </main>
+
       </div>
-    </div>
-  );
-}
-
-function DashboardCard({
-  title,
-  value,
-  darkMode,
-}: {
-  title: string;
-  value: string;
-  darkMode: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-xl border p-5 shadow-sm transition-colors ${
-        darkMode
-          ? "border-gray-800 bg-[#111827]"
-          : "border-gray-200 bg-white"
-      }`}
-    >
-      <p
-        className={`text-sm ${
-          darkMode
-            ? "text-gray-400"
-            : "text-gray-500"
-        }`}
-      >
-        {title}
-      </p>
-
-      <p className="mt-3 text-2xl font-semibold">
-        {value}
-      </p>
     </div>
   );
 }

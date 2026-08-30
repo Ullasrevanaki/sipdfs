@@ -1,0 +1,21 @@
+{
+  "model": "XGBoost",
+  "task": "Retail Demand Forecasting",
+  "training_rows": 2815560,
+  "validation_rows": 135432,
+  "features": 16,
+  "validation_metrics": {
+    "MAE": 57.6066,
+    "RMSE": 221.9227,
+    "WMAPE": 11.98,
+    "R2": 0.9723
+  },
+  "training_period": {
+    "start": "2013-01-29",
+    "end": "2017-05-31"
+  },
+  "validation_period": {
+    "start": "2017-06-01",
+    "end": "2017-08-15"
+  }
+}
