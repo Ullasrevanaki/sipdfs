@@ -24,3 +24,25 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+/* Grocery Market Marquee */
+
+@keyframes grocery-marquee {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.grocery-marquee {
+  display: flex;
+  width: max-content;
+  animation: grocery-marquee 80s linear infinite;
+  will-change: transform;
+}
+
+.grocery-marquee:hover {
+  animation-play-state: paused;
+}

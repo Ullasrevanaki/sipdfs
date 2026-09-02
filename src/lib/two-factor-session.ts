@@ -1,13 +1,27 @@
+import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
-import crypto from "crypto";
 
 const COOKIE_NAME = "two_factor_verified";
 
+function getSecretKey() {
+  const secret = process.env.NEXTAUTH_SECRET;
+
+  if (!secret) {
+    throw new Error("NEXTAUTH_SECRET is not configured");
+  }
+
+  return new TextEncoder().encode(secret);
+}
+
 export async function createTwoFactorSession(userId: string) {
-  const token = crypto
-    .createHmac("sha256", process.env.AUTH_SECRET!)
-    .update(userId)
-    .digest("hex");
+  const token = await new SignJWT({
+    userId,
+    verified: true,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("12h")
+    .sign(getSecretKey());
 
   const cookieStore = await cookies();
 
@@ -16,19 +30,28 @@ export async function createTwoFactorSession(userId: string) {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge: 60 * 60 * 12,
   });
 }
 
 export async function isTwoFactorVerified(userId: string) {
-  const token = crypto
-    .createHmac("sha256", process.env.AUTH_SECRET!)
-    .update(userId)
-    .digest("hex");
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get(COOKIE_NAME)?.value;
 
-  const cookieStore = await cookies();
+    if (!token) {
+      return false;
+    }
 
-  return cookieStore.get(COOKIE_NAME)?.value === token;
+    const { payload } = await jwtVerify(token, getSecretKey());
+
+    return (
+      payload.userId === userId &&
+      payload.verified === true
+    );
+  } catch {
+    return false;
+  }
 }
 
 export async function clearTwoFactorSession() {

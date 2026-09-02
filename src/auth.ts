@@ -18,32 +18,33 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
 
   callbacks: {
-  async signIn() {
-    return true;
-  },
+    async signIn() {
+      return true;
+    },
 
-  async jwt({ token, user }) {
-    if (user) {
-      token.id = user.id;
-    }
-
-    return token;
-  },
-
-  async session({ session, token }) {
-    if (session.user) {
-      if (token.id) {
-        session.user.id = token.id as string;
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
       }
 
-      if (token.email) {
-        session.user.email = token.email;
-      }
-    }
+      return token;
+    },
 
-    return session;
+    async session({ session, token }) {
+      if (session.user) {
+        if (token.id) {
+          session.user.id = token.id as string;
+        }
+
+        if (token.email) {
+          session.user.email = token.email;
+        }
+      }
+
+      return session;
+    },
   },
-},
+
   pages: {
     signIn: "/login",
   },
