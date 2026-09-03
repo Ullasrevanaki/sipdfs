@@ -18,8 +18,29 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
 
   callbacks: {
+    async signIn({ user }) {
+      if (!user.id) {
+        return false;
+      }
+
+      await prisma.store.upsert({
+        where: {
+          ownerId: user.id,
+        },
+        update: {},
+        create: {
+          ownerId: user.id,
+          name: user.name
+            ? `${user.name}'s Store`
+            : "My Store",
+        },
+      });
+
+      return true;
+    },
+
     async jwt({ token, user }) {
-      if (user?.id) {
+      if (user) {
         token.id = user.id;
       }
 
@@ -39,25 +60,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
       return session;
     },
-
-    async redirect({ url, baseUrl }) {
-      if (url.startsWith("/")) {
-        return `${baseUrl}${url}`;
-      }
-
-      if (url.startsWith(baseUrl)) {
-        return url;
-      }
-
-      return `${baseUrl}/dashboard`;
-    },
   },
 
   pages: {
     signIn: "/login",
   },
-
-  secret: process.env.AUTH_SECRET,
 
   debug: true,
 });

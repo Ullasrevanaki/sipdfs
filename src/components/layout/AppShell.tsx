@@ -5,46 +5,16 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 const navigation = [
-  {
-    name: "Dashboard",
-    href: "/dashboard",
-  },
-  {
-    name: "Import Data",
-    href: "/dashboard/import",
-  },
-  {
-    name: "Products",
-    href: "/dashboard/products",
-  },
-  {
-    name: "Sales",
-    href: "/dashboard/sales",
-  },
-  {
-    name: "Purchases",
-    href: "/dashboard/purchases",
-  },
-  {
-    name: "Inventory",
-    href: "/dashboard/inventory",
-  },
-  {
-    name: "Forecast",
-    href: "/dashboard/forecast",
-  },
-  {
-    name: "Alerts",
-    href: "/dashboard/alerts",
-  },
-  {
-    name: "Reports",
-    href: "/dashboard/reports",
-  },
-  {
-    name: "Settings",
-    href: "/dashboard/settings",
-  },
+  { name: "Dashboard", href: "/dashboard", icon: "⌂" },
+  { name: "Import Data", href: "/dashboard/import", icon: "↥" },
+  { name: "Products", href: "/dashboard/products", icon: "◇" },
+  { name: "Sales", href: "/dashboard/sales", icon: "▱" },
+  { name: "Purchases", href: "/dashboard/purchases", icon: "▣" },
+  { name: "Inventory", href: "/dashboard/inventory", icon: "▤" },
+  { name: "Forecast", href: "/dashboard/forecast", icon: "⌁" },
+  { name: "Alerts", href: "/dashboard/alerts", icon: "♧" },
+  { name: "Reports", href: "/dashboard/reports", icon: "▧" },
+  { name: "Settings", href: "/dashboard/settings", icon: "⚙" },
 ];
 
 export default function AppShell({
@@ -59,113 +29,56 @@ export default function AppShell({
   children?: React.ReactNode;
 }) {
   const pathname = usePathname();
-
-  const [darkMode, setDarkMode] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
   return (
-    <div
-      className={`min-h-screen transition-colors duration-300 ${
-        darkMode
-          ? "bg-[#0b1120] text-white"
-          : "bg-gray-50 text-gray-900"
-      }`}
-    >
-      {/* TOP BAR */}
-      <header
-        className={`flex h-16 items-center justify-end border-b px-6 ${
-          darkMode
-            ? "border-gray-800 bg-[#0b1120]"
-            : "border-gray-200 bg-white"
-        }`}
-      >
-        <div className="flex items-center gap-4">
+    <div className="min-h-screen bg-[#f8fbfa] text-[#0f172a]">
+      <header className="sticky top-0 z-50 h-[88px] border-b border-[#e3ebe8] bg-white">
+        <div className="flex h-full items-center justify-between px-6">
+          {/* Store Branding */}
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#e8f6f2] text-2xl">
+              🛍️
+            </div>
 
-          {/* Notifications */}
-          <button
-            type="button"
-            className={`flex h-10 w-10 items-center justify-center rounded-full text-xl transition ${
-              darkMode
-                ? "hover:bg-gray-800"
-                : "hover:bg-gray-100"
-            }`}
-            aria-label="Notifications"
-          >
-            🔔
-          </button>
+            <div>
+              <h1 className="text-[19px] font-bold leading-tight text-[#0f172a]">
+                {storeName || "Ullas Stores"}
+              </h1>
 
-          {/* Theme */}
-          <button
-            type="button"
-            onClick={() => setDarkMode(!darkMode)}
-            className={`flex h-10 w-10 items-center justify-center rounded-full text-lg transition ${
-              darkMode
-                ? "bg-gray-800 hover:bg-gray-700"
-                : "bg-gray-100 hover:bg-gray-200"
-            }`}
-            aria-label="Toggle theme"
-            title={darkMode ? "Bright mode" : "Dark mode"}
-          >
-            {darkMode ? "☀️" : "🌙"}
-          </button>
+              <p className="mt-1 text-[10px] leading-[12px] text-[#64748b]">
+                Smarter Inventory.
+                <br />
+                Brighter Business.
+              </p>
+            </div>
+          </div>
 
-          {/* PROFILE */}
+          {/* Profile */}
           <div className="relative">
-
             <button
               type="button"
               onClick={() => setProfileOpen(!profileOpen)}
-              className={`flex h-10 w-10 items-center justify-center rounded-full transition ${
-                darkMode
-                  ? "bg-gray-800 hover:bg-gray-700"
-                  : "bg-gray-200 hover:bg-gray-300"
-              }`}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-[#edf0f5] text-lg transition hover:bg-[#e3e7ee]"
               aria-label="User profile"
             >
               👤
             </button>
 
-            {/* PROFILE DROPDOWN */}
             {profileOpen && (
-              <div
-                className={`absolute right-0 top-12 z-50 w-64 rounded-xl border p-4 shadow-xl ${
-                  darkMode
-                    ? "border-gray-700 bg-[#111827]"
-                    : "border-gray-200 bg-white"
-                }`}
-              >
-                <div className="border-b pb-4">
-
-                  <p
-                    className={`font-semibold ${
-                      darkMode
-                        ? "text-white"
-                        : "text-gray-900"
-                    }`}
-                  >
+              <div className="absolute right-0 top-12 z-50 w-64 rounded-xl border border-[#dfe8e5] bg-white p-4 shadow-xl">
+                <div className="border-b border-[#edf1ef] pb-4">
+                  <p className="font-semibold text-[#0f172a]">
                     {userName || "User"}
                   </p>
 
-                  <p
-                    className={`mt-1 break-all text-sm ${
-                      darkMode
-                        ? "text-gray-400"
-                        : "text-gray-500"
-                    }`}
-                  >
+                  <p className="mt-1 break-all text-sm text-[#64748b]">
                     {userEmail}
                   </p>
 
-                  <p
-                    className={`mt-2 text-sm font-medium ${
-                      darkMode
-                        ? "text-gray-300"
-                        : "text-gray-600"
-                    }`}
-                  >
+                  <p className="mt-2 text-sm font-medium text-[#168c70]">
                     {storeName}
                   </p>
-
                 </div>
 
                 <form
@@ -175,35 +88,22 @@ export default function AppShell({
                 >
                   <button
                     type="submit"
-                    className={`w-full rounded-lg px-4 py-3 text-left text-sm font-semibold transition ${
-                      darkMode
-                        ? "text-red-400 hover:bg-gray-800"
-                        : "text-red-600 hover:bg-red-50"
-                    }`}
+                    className="w-full rounded-lg px-4 py-3 text-left text-sm font-semibold text-red-600 transition hover:bg-red-50"
                   >
                     Sign out
                   </button>
                 </form>
               </div>
             )}
-
           </div>
         </div>
       </header>
 
-      <div className="flex min-h-[calc(100vh-4rem)]">
-
-        {/* SIDEBAR */}
-        <aside
-          className={`w-60 border-r transition-colors ${
-            darkMode
-              ? "border-gray-800 bg-[#111827]"
-              : "border-gray-200 bg-white"
-          }`}
-        >
-          <nav className="p-4">
-            <ul className="space-y-1">
-
+      <div className="flex min-h-[calc(100vh-88px)]">
+        {/* Sidebar */}
+        <aside className="fixed left-0 top-[88px] z-40 flex h-[calc(100vh-88px)] w-[250px] flex-col border-r border-[#e1ebe8] bg-white">
+          <nav className="flex-1 px-3 py-5">
+            <ul className="space-y-1.5">
               {navigation.map((item) => {
                 const isActive =
                   item.href === "/dashboard"
@@ -212,37 +112,39 @@ export default function AppShell({
 
                 return (
                   <li key={item.href}>
-
                     <Link
                       href={item.href}
-                      className={`block w-full rounded-lg px-4 py-3 text-left text-sm font-medium transition ${
+                      className={`flex items-center gap-4 rounded-xl px-4 py-3 text-sm font-medium transition-all ${
                         isActive
-                          ? darkMode
-                            ? "bg-white text-gray-900"
-                            : "bg-gray-900 text-white"
-                          : darkMode
-                          ? "text-gray-300 hover:bg-gray-800 hover:text-white"
-                          : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                          ? "bg-[#159b7b] text-white shadow-sm"
+                          : "text-[#334155] hover:bg-[#eef8f5] hover:text-[#168c70]"
                       }`}
                     >
-                      {item.name}
-                    </Link>
+                      <span
+                        className={`flex w-5 justify-center text-base ${
+                          isActive
+                            ? "text-white"
+                            : "text-[#64748b]"
+                        }`}
+                      >
+                        {item.icon}
+                      </span>
 
+                      <span>{item.name}</span>
+                    </Link>
                   </li>
                 );
               })}
-
             </ul>
           </nav>
         </aside>
 
-        {/* MAIN CONTENT */}
-        <main className="flex-1 p-8">
-          <div className="mx-auto max-w-7xl">
+        {/* Main Content */}
+        <main className="ml-[250px] min-w-0 flex-1 bg-[#f8fbfa] p-7">
+          <div className="mx-auto max-w-[1500px]">
             {children}
           </div>
         </main>
-
       </div>
     </div>
   );

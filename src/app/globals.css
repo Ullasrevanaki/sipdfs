@@ -46,3 +46,80 @@ body {
 .grocery-marquee:hover {
   animation-play-state: paused;
 }
+/* =========================================================
+   DASHBOARD DARK MODE
+   Makes existing dashboard cards transparent/dark instead
+   of remaining white.
+========================================================= */
+
+[data-theme="dark"] .dashboard-surface .bg-white {
+  background-color: rgba(255, 255, 255, 0.035) !important;
+}
+
+[data-theme="dark"] .dashboard-surface .bg-gray-50 {
+  background-color: rgba(255, 255, 255, 0.025) !important;
+}
+
+[data-theme="dark"] .dashboard-surface .bg-gray-100 {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+[data-theme="dark"] .dashboard-surface .border-gray-200 {
+  border-color: rgba(255, 255, 255, 0.10) !important;
+}
+
+[data-theme="dark"] .dashboard-surface .border-gray-100 {
+  border-color: rgba(255, 255, 255, 0.07) !important;
+}
+
+[data-theme="dark"] .dashboard-surface .border-gray-300 {
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+[data-theme="dark"] .dashboard-surface .text-gray-900 {
+  color: #f8fafc !important;
+}
+
+[data-theme="dark"] .dashboard-surface .text-gray-700 {
+  color: #e2e8f0 !important;
+}
+
+[data-theme="dark"] .dashboard-surface .text-gray-600 {
+  color: #cbd5e1 !important;
+}
+
+[data-theme="dark"] .dashboard-surface .text-gray-500 {
+  color: #94a3b8 !important;
+}
+
+[data-theme="dark"] .dashboard-surface .text-gray-400 {
+  color: #64748b !important;
+}
+
+/* Nested recommendation / alert cards */
+
+[data-theme="dark"] .dashboard-surface .bg-gray-50 {
+  backdrop-filter: blur(8px);
+}
+
+/* Tables */
+
+[data-theme="dark"] .dashboard-surface tr {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Dashed empty states */
+
+[data-theme="dark"] .dashboard-surface .border-dashed {
+  border-color: rgba(255, 255, 255, 0.14) !important;
+}
+
+/* Dark mode primary action */
+
+[data-theme="dark"] .dashboard-surface .bg-gray-900 {
+  background-color: #12a982 !important;
+}
+
+[data-theme="dark"] .dashboard-surface .hover\:bg-gray-800:hover {
+  background-color: #0e8f70 !important;
+}
