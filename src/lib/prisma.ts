@@ -1,14 +1,21 @@
 import { PrismaClient } from "@/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-const connectionString = process.env.DIRECT_URL;
+const configuredConnectionString = process.env.DIRECT_URL;
 
-if (!connectionString) {
+if (!configuredConnectionString) {
   throw new Error("DIRECT_URL is not defined");
 }
 
+// pg 8.23 warns that `sslmode=require` will change meaning in pg 9.
+// `verify-full` preserves the current secure behavior explicitly.
+const connectionUrl = new URL(configuredConnectionString);
+if (["prefer", "require", "verify-ca"].includes(connectionUrl.searchParams.get("sslmode") ?? "")) {
+  connectionUrl.searchParams.set("sslmode", "verify-full");
+}
+
 const adapter = new PrismaPg({
-  connectionString,
+  connectionString: connectionUrl.toString(),
 });
 
 const globalForPrisma = globalThis as unknown as {

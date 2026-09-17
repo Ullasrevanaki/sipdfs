@@ -3,18 +3,30 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import {
+  Home,
+  Upload,
+  Package,
+  ShoppingCart,
+  Receipt,
+  Boxes,
+  TrendingUp,
+  Bell,
+  BarChart3,
+  Settings,
+} from "lucide-react";
 
 const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: "⌂" },
-  { name: "Import Data", href: "/dashboard/import", icon: "↥" },
-  { name: "Products", href: "/dashboard/products", icon: "◇" },
-  { name: "Sales", href: "/dashboard/sales", icon: "▱" },
-  { name: "Purchases", href: "/dashboard/purchases", icon: "▣" },
-  { name: "Inventory", href: "/dashboard/inventory", icon: "▤" },
-  { name: "Forecast", href: "/dashboard/forecast", icon: "⌁" },
-  { name: "Alerts", href: "/dashboard/alerts", icon: "♧" },
-  { name: "Reports", href: "/dashboard/reports", icon: "▧" },
-  { name: "Settings", href: "/dashboard/settings", icon: "⚙" },
+  { name: "Dashboard", href: "/dashboard", icon: Home },
+  { name: "Import Data", href: "/dashboard/import", icon: Upload },
+  { name: "Products", href: "/dashboard/products", icon: Package },
+  { name: "Sales", href: "/dashboard/sales", icon: ShoppingCart },
+  { name: "Purchases", href: "/dashboard/purchases", icon: Receipt },
+  { name: "Inventory", href: "/dashboard/inventory", icon: Boxes },
+  { name: "Forecast", href: "/dashboard/forecast", icon: TrendingUp },
+  { name: "Alerts", href: "/dashboard/alerts", icon: Bell },
+  { name: "Reports", href: "/dashboard/reports", icon: BarChart3 },
+  { name: "Settings", href: "/dashboard/settings", icon: Settings },
 ];
 
 export default function AppShell({
@@ -35,6 +47,7 @@ export default function AppShell({
     <div className="min-h-screen bg-[#f8fbfa] text-[#0f172a]">
       <header className="sticky top-0 z-50 h-[88px] border-b border-[#e3ebe8] bg-white">
         <div className="flex h-full items-center justify-between px-6">
+
           {/* Store Branding */}
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#e8f6f2] text-2xl">
@@ -100,6 +113,7 @@ export default function AppShell({
       </header>
 
       <div className="flex min-h-[calc(100vh-88px)]">
+
         {/* Sidebar */}
         <aside className="fixed left-0 top-[88px] z-40 flex h-[calc(100vh-88px)] w-[250px] flex-col border-r border-[#e1ebe8] bg-white">
           <nav className="flex-1 px-3 py-5">
@@ -109,6 +123,8 @@ export default function AppShell({
                   item.href === "/dashboard"
                     ? pathname === "/dashboard"
                     : pathname.startsWith(item.href);
+
+                const Icon = item.icon;
 
                 return (
                   <li key={item.href}>
@@ -120,14 +136,16 @@ export default function AppShell({
                           : "text-[#334155] hover:bg-[#eef8f5] hover:text-[#168c70]"
                       }`}
                     >
-                      <span
-                        className={`flex w-5 justify-center text-base ${
-                          isActive
-                            ? "text-white"
-                            : "text-[#64748b]"
-                        }`}
-                      >
-                        {item.icon}
+                      <span className="flex w-5 items-center justify-center">
+                        <Icon
+                          size={18}
+                          strokeWidth={1.8}
+                          className={
+                            isActive
+                              ? "text-white"
+                              : "text-[#64748b]"
+                          }
+                        />
                       </span>
 
                       <span>{item.name}</span>

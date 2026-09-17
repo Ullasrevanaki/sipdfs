@@ -1,5 +1,6 @@
 "use client";
 
+import AppShell from "@/components/layout/AppShell";
 import { useRef, useState } from "react";
 
 type ImportType =
@@ -72,8 +73,7 @@ const REQUIRED_COLUMNS = [
 ];
 
 export default function DataImportPage() {
-  const [active, setActive] =
-    useState<ImportType>("manual");
+  const [active, setActive] = useState<ImportType>("manual");
 
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
@@ -88,25 +88,12 @@ export default function DataImportPage() {
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const [csvFileName, setCsvFileName] =
-    useState("");
+  const [csvFileName, setCsvFileName] = useState("");
+  const [csvRows, setCsvRows] = useState<CsvRow[]>([]);
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [csvReady, setCsvReady] = useState(false);
 
-  const [csvRows, setCsvRows] =
-    useState<CsvRow[]>([]);
-
-  const [csvHeaders, setCsvHeaders] =
-    useState<string[]>([]);
-
-  const [csvReady, setCsvReady] =
-    useState(false);
-
-  const fileInputRef =
-    useRef<HTMLInputElement>(null);
-
-  const selected =
-    importOptions.find(
-      (item) => item.id === active
-    );
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function handleManualSubmit() {
     setMessage("");
@@ -127,30 +114,26 @@ export default function DataImportPage() {
     setSaving(true);
 
     try {
-      const response = await fetch(
-        "/api/import/manual",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            name,
-            category,
-            unit,
-            quantity: quantity || 0,
-            costPrice,
-            sellingPrice,
-          }),
-        }
-      );
+      const response = await fetch("/api/import/manual", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name,
+          category,
+          unit,
+          quantity: quantity || 0,
+          costPrice,
+          sellingPrice,
+        }),
+      });
 
       const data = await response.json();
 
       if (!response.ok || !data.success) {
         throw new Error(
-          data.error ||
-            "Failed to import product."
+          data.error || "Failed to import product."
         );
       }
 
@@ -197,9 +180,7 @@ export default function DataImportPage() {
 
     try {
       const text = await file.text();
-
-      const parsed =
-        parseCsv(text);
+      const parsed = parseCsv(text);
 
       if (!parsed.headers.length) {
         throw new Error(
@@ -207,77 +188,61 @@ export default function DataImportPage() {
         );
       }
 
-      const normalizedHeaders =
-        parsed.headers.map(
-          (header) =>
-            header
-              .trim()
-              .toLowerCase()
-              .replace(/\s+/g, "_")
-        );
+      const normalizedHeaders = parsed.headers.map((header) =>
+        header.trim().toLowerCase().replace(/\s+/g, "_")
+      );
 
-      const missingColumns =
-        REQUIRED_COLUMNS.filter(
-          (column) =>
-            !normalizedHeaders.includes(
-              column
-            )
-        );
+      const missingColumns = REQUIRED_COLUMNS.filter(
+        (column) => !normalizedHeaders.includes(column)
+      );
 
       if (missingColumns.length > 0) {
         throw new Error(
-          `Missing required columns: ${missingColumns.join(
-            ", "
-          )}`
+          `Missing required columns: ${missingColumns.join(", ")}`
         );
       }
 
-      const rows: CsvRow[] =
-        parsed.rows.map((row) => ({
-          date:
-            row[normalizedHeaders.indexOf("date")] ??
-            "",
-          product_name:
-            row[
-              normalizedHeaders.indexOf(
-                "product_name"
-              )
-            ] ?? "",
-          category:
-            row[
-              normalizedHeaders.indexOf(
-                "category"
-              )
-            ] ?? "",
-          unit:
-            row[
-              normalizedHeaders.indexOf("unit")
-            ] ?? "",
-          cost_price:
-            row[
-              normalizedHeaders.indexOf(
-                "cost_price"
-              )
-            ] ?? "",
-          selling_price:
-            row[
-              normalizedHeaders.indexOf(
-                "selling_price"
-              )
-            ] ?? "",
-          quantity:
-            row[
-              normalizedHeaders.indexOf(
-                "quantity"
-              )
-            ] ?? "",
-          transaction_type:
-            row[
-              normalizedHeaders.indexOf(
-                "transaction_type"
-              )
-            ] ?? "",
-        }));
+      const rows: CsvRow[] = parsed.rows.map((row) => ({
+        date:
+          row[
+            normalizedHeaders.indexOf("date")
+          ] ?? "",
+
+        product_name:
+          row[
+            normalizedHeaders.indexOf("product_name")
+          ] ?? "",
+
+        category:
+          row[
+            normalizedHeaders.indexOf("category")
+          ] ?? "",
+
+        unit:
+          row[
+            normalizedHeaders.indexOf("unit")
+          ] ?? "",
+
+        cost_price:
+          row[
+            normalizedHeaders.indexOf("cost_price")
+          ] ?? "",
+
+        selling_price:
+          row[
+            normalizedHeaders.indexOf("selling_price")
+          ] ?? "",
+
+        quantity:
+          row[
+            normalizedHeaders.indexOf("quantity")
+          ] ?? "",
+
+        transaction_type:
+          row[
+            normalizedHeaders.indexOf("transaction_type")
+          ] ?? "",
+      }));
 
       if (!rows.length) {
         throw new Error(
@@ -324,26 +289,22 @@ export default function DataImportPage() {
     setSaving(true);
 
     try {
-      const response = await fetch(
-        "/api/import/csv",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            fileName: csvFileName,
-            rows: csvRows,
-          }),
-        }
-      );
+      const response = await fetch("/api/import/csv", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fileName: csvFileName,
+          rows: csvRows,
+        }),
+      });
 
       const data = await response.json();
 
       if (!response.ok || !data.success) {
         throw new Error(
-          data.error ||
-            "CSV import failed."
+          data.error || "CSV import failed."
         );
       }
 
@@ -367,39 +328,60 @@ export default function DataImportPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f7f8fa] px-6 py-8">
-      <div className="mx-auto max-w-7xl">
+    <AppShell
+      storeName="Ullas Stores"
+      userName="User"
+      userEmail=""
+    >
+      <div className="w-full max-w-[1400px]">
 
         {/* HEADER */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-slate-900">
-            Data Import
-          </h1>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-semibold text-gray-900">
+              Import Data
+            </h1>
 
-          <p className="mt-2 text-sm text-slate-500">
-            Add inventory, product and transaction data
-            from different sources.
-          </p>
+            <p className="mt-1 text-sm font-medium text-gray-600">
+              Ullas Stores
+            </p>
+
+            <p className="mt-2 text-gray-500">
+              Add inventory, product and transaction data
+              from different sources.
+            </p>
+          </div>
         </div>
 
-        {/* DATA SOURCES */}
-        <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        {/* STATUS MESSAGE */}
+        {message && (
+          <div className="mt-6 rounded-xl border border-green-200 bg-green-50 px-5 py-4 text-sm font-medium text-green-700">
+            {message}
+          </div>
+        )}
 
-          <div className="mb-5">
-            <h2 className="text-lg font-semibold text-slate-900">
+        {error && (
+          <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-700">
+            {error}
+          </div>
+        )}
+
+        {/* DATA SOURCES */}
+        <div className="mt-8 rounded-xl border border-gray-200 bg-white shadow-sm">
+
+          <div className="border-b border-gray-200 px-6 py-5">
+            <h2 className="text-lg font-semibold text-gray-900">
               Data Sources / Input
             </h2>
 
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-gray-500">
               Select how you want to add data to your inventory.
             </p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-
+          <div className="grid gap-4 p-6 md:grid-cols-2 xl:grid-cols-3">
             {importOptions.map((item) => {
-              const isActive =
-                active === item.id;
+              const isActive = active === item.id;
 
               return (
                 <button
@@ -412,28 +394,28 @@ export default function DataImportPage() {
                   }}
                   className={`rounded-xl border p-5 text-left transition ${
                     isActive
-                      ? "border-blue-500 bg-blue-50 shadow-sm"
-                      : "border-slate-200 bg-white hover:border-blue-300 hover:bg-slate-50"
+                      ? "border-[#159b7b] bg-[#f0f9f6] shadow-sm"
+                      : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50"
                   }`}
                 >
                   <div className="flex items-start gap-4">
 
                     <div
-                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-xl ${
+                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-lg ${
                         isActive
-                          ? "bg-blue-600 text-white"
-                          : "bg-slate-100 text-slate-700"
+                          ? "bg-[#159b7b] text-white"
+                          : "bg-gray-100 text-gray-600"
                       }`}
                     >
                       {item.icon}
                     </div>
 
-                    <div>
-                      <h3 className="font-semibold text-slate-900">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-gray-900">
                         {item.title}
                       </h3>
 
-                      <p className="mt-1 text-sm leading-5 text-slate-500">
+                      <p className="mt-1 text-sm leading-5 text-gray-500">
                         {item.description}
                       </p>
                     </div>
@@ -442,164 +424,163 @@ export default function DataImportPage() {
                 </button>
               );
             })}
-
           </div>
         </div>
 
-        {/* ACTIVE IMPORT PANEL */}
-        <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        {/* ACTIVE IMPORT AREA */}
+        <div className="mt-6 rounded-xl border border-gray-200 bg-white shadow-sm">
 
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold text-slate-900">
-              {selected?.title}
+          <div className="border-b border-gray-200 px-6 py-5">
+            <h2 className="text-lg font-semibold text-gray-900">
+              {active === "manual" && "Manual Product Entry"}
+              {active === "barcode" && "Barcode Scan"}
+              {active === "csv" && "Excel / CSV Import"}
+              {active === "purchase" && "Purchase Bills"}
+              {active === "sales" && "Sales Bills"}
+              {active === "external" && "External Data"}
             </h2>
 
-            <p className="mt-1 text-sm text-slate-500">
-              {selected?.description}
+            <p className="mt-1 text-sm text-gray-500">
+              {active === "manual" &&
+                "Enter product details manually."}
+
+              {active === "barcode" &&
+                "Enter or scan a product barcode."}
+
+              {active === "csv" &&
+                "Upload and validate historical inventory or sales data."}
+
+              {active === "purchase" &&
+                "Upload purchase invoices or purchase data."}
+
+              {active === "sales" &&
+                "Upload sales bills or transaction files."}
+
+              {active === "external" &&
+                "Upload compatible external inventory or sales data."}
             </p>
           </div>
 
-          {message && (
-            <div className="mb-5 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
-              {message}
-            </div>
-          )}
+          <div className="p-6">
 
-          {error && (
-            <div className="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {error}
-            </div>
-          )}
+            {/* MANUAL */}
+            {active === "manual" && (
+              <div className="max-w-[900px] space-y-6">
 
-          {/* BARCODE */}
-          {active === "barcode" && (
-            <div className="max-w-xl">
+                <div className="grid gap-5 md:grid-cols-2">
 
-              <label className="mb-2 block text-sm font-medium text-slate-700">
-                Barcode
-              </label>
+                  <Input
+                    label="Product Name"
+                    value={name}
+                    onChange={setName}
+                    placeholder="e.g. Rice 5kg"
+                  />
 
-              <div className="flex gap-3">
+                  <Input
+                    label="Category"
+                    value={category}
+                    onChange={setCategory}
+                    placeholder="e.g. Grocery"
+                  />
 
-                <input
+                  <Input
+                    label="Unit"
+                    value={unit}
+                    onChange={setUnit}
+                    placeholder="e.g. kg, piece, litre"
+                  />
+
+                  <Input
+                    label="Quantity"
+                    value={quantity}
+                    onChange={setQuantity}
+                    placeholder="e.g. 100"
+                    type="number"
+                  />
+
+                  <Input
+                    label="Cost Price"
+                    value={costPrice}
+                    onChange={setCostPrice}
+                    placeholder="e.g. 250"
+                    type="number"
+                  />
+
+                  <Input
+                    label="Selling Price"
+                    value={sellingPrice}
+                    onChange={setSellingPrice}
+                    placeholder="e.g. 300"
+                    type="number"
+                  />
+
+                </div>
+
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={handleManualSubmit}
+                    disabled={saving}
+                    className="rounded-lg bg-gray-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {saving
+                      ? "Importing..."
+                      : "Import Product"}
+                  </button>
+                </div>
+
+              </div>
+            )}
+
+            {/* BARCODE */}
+            {active === "barcode" && (
+              <div className="max-w-[600px]">
+
+                <Input
+                  label="Barcode"
                   value={barcode}
-                  onChange={(e) =>
-                    setBarcode(
-                      e.target.value
-                    )
-                  }
+                  onChange={setBarcode}
                   placeholder="Scan or enter barcode"
-                  className="flex-1 rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500"
                 />
 
                 <button
                   type="button"
-                  className="rounded-lg bg-blue-600 px-5 py-3 text-sm font-medium text-white hover:bg-blue-700"
+                  className="mt-5 rounded-lg bg-gray-900 px-6 py-3 text-sm font-semibold text-white hover:bg-gray-800"
+                  onClick={() => {
+                    setMessage(
+                      barcode.trim()
+                        ? `Barcode ${barcode} received.`
+                        : "Please enter a barcode."
+                    );
+                  }}
                 >
-                  Scan
+                  Process Barcode
                 </button>
 
               </div>
+            )}
 
-              <p className="mt-3 text-xs text-slate-500">
-                Barcode scanning will be connected to the
-                product database in the next import phase.
-              </p>
-
-            </div>
-          )}
-
-          {/* MANUAL */}
-          {active === "manual" && (
-            <div className="grid max-w-4xl gap-5 md:grid-cols-2">
-
-              <Input
-                label="Product Name"
-                value={name}
-                onChange={setName}
-                placeholder="e.g. Rice"
-              />
-
-              <Input
-                label="Category"
-                value={category}
-                onChange={setCategory}
-                placeholder="e.g. Grocery"
-              />
-
-              <Input
-                label="Unit"
-                value={unit}
-                onChange={setUnit}
-                placeholder="kg / box / piece"
-              />
-
-              <Input
-                label="Quantity"
-                value={quantity}
-                onChange={setQuantity}
-                placeholder="0"
-                type="number"
-              />
-
-              <Input
-                label="Cost Price"
-                value={costPrice}
-                onChange={setCostPrice}
-                placeholder="0.00"
-                type="number"
-              />
-
-              <Input
-                label="Selling Price"
-                value={sellingPrice}
-                onChange={setSellingPrice}
-                placeholder="0.00"
-                type="number"
-              />
-
-              <div className="md:col-span-2">
-
-                <button
-                  type="button"
-                  onClick={handleManualSubmit}
-                  disabled={saving}
-                  className="rounded-lg bg-blue-600 px-6 py-3 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {saving
-                    ? "Adding..."
-                    : "Add Data"}
-                </button>
-
-              </div>
-
-            </div>
-          )}
-
-          {/* CSV */}
-          {active === "csv" && (
-            <div>
-
-              <div className="max-w-3xl">
+            {/* CSV */}
+            {active === "csv" && (
+              <div className="max-w-[1100px]">
 
                 <div
                   onClick={() =>
                     fileInputRef.current?.click()
                   }
-                  className="cursor-pointer rounded-xl border-2 border-dashed border-slate-300 p-10 text-center transition hover:border-blue-400 hover:bg-blue-50"
+                  className="cursor-pointer rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-10 text-center transition hover:border-[#159b7b] hover:bg-[#f8fcfb]"
                 >
-
-                  <div className="text-4xl text-slate-400">
+                  <div className="text-4xl">
                     ⇧
                   </div>
 
-                  <h3 className="mt-3 font-semibold text-slate-900">
-                    Upload CSV File
+                  <h3 className="mt-3 font-semibold text-gray-900">
+                    Upload Excel or CSV
                   </h3>
 
-                  <p className="mt-2 text-sm text-slate-500">
-                    Select the 1,000-row CSV dataset or
-                    another compatible CSV file.
+                  <p className="mx-auto mt-2 max-w-xl text-sm text-gray-500">
+                    Select a .csv file containing the
+                    required inventory/sales columns.
                   </p>
 
                   <button
@@ -608,11 +589,10 @@ export default function DataImportPage() {
                       event.stopPropagation();
                       fileInputRef.current?.click();
                     }}
-                    className="mt-5 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
+                    className="mt-5 rounded-lg bg-gray-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800"
                   >
-                    Choose CSV File
+                    Choose File
                   </button>
-
                 </div>
 
                 <input
@@ -623,235 +603,219 @@ export default function DataImportPage() {
                   className="hidden"
                 />
 
-              </div>
+                {csvFileName && (
+                  <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50 p-5">
 
-              {/* FILE SUMMARY */}
-              {csvReady && (
-                <div className="mt-6 rounded-xl border border-green-200 bg-green-50 p-5">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">
+                          {csvFileName}
+                        </p>
 
-                    <div>
-                      <p className="text-sm font-semibold text-green-800">
-                        File ready for import
-                      </p>
+                        <p className="mt-1 text-sm text-gray-500">
+                          {csvRows.length.toLocaleString()} rows
+                          {csvHeaders.length > 0
+                            ? ` • ${csvHeaders.length} columns`
+                            : ""}
+                        </p>
+                      </div>
 
-                      <p className="mt-1 text-sm text-green-700">
-                        {csvFileName}
-                      </p>
+                      {csvReady && (
+                        <span className="w-fit rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
+                          Validated
+                        </span>
+                      )}
+
                     </div>
 
-                    <div className="rounded-lg bg-white px-4 py-3 text-center shadow-sm">
-                      <p className="text-xs text-slate-500">
-                        Rows detected
-                      </p>
+                    {csvRows.length > 0 && (
+                      <div className="mt-6 overflow-x-auto rounded-lg border border-gray-200 bg-white">
 
-                      <p className="text-xl font-bold text-slate-900">
-                        {csvRows.length.toLocaleString()}
-                      </p>
-                    </div>
+                        <table className="min-w-full text-left text-sm">
 
-                  </div>
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-3 font-semibold">
+                                Date
+                              </th>
 
-                </div>
-              )}
+                              <th className="px-4 py-3 font-semibold">
+                                Product
+                              </th>
 
-              {/* PREVIEW */}
-              {csvReady && csvRows.length > 0 && (
-                <div className="mt-6">
+                              <th className="px-4 py-3 font-semibold">
+                                Category
+                              </th>
 
-                  <div className="mb-3 flex items-center justify-between">
+                              <th className="px-4 py-3 font-semibold">
+                                Unit
+                              </th>
 
-                    <div>
-                      <h3 className="text-lg font-semibold text-slate-900">
-                        Data Preview
-                      </h3>
+                              <th className="px-4 py-3 font-semibold">
+                                Quantity
+                              </th>
 
-                      <p className="mt-1 text-sm text-slate-500">
-                        Showing the first 10 rows.
-                      </p>
-                    </div>
-
-                  </div>
-
-                  <div className="overflow-x-auto rounded-xl border border-slate-200">
-
-                    <table className="min-w-full text-left text-sm">
-
-                      <thead className="bg-slate-50">
-
-                        <tr>
-                          <th className="px-4 py-3 font-semibold text-slate-700">
-                            Date
-                          </th>
-
-                          <th className="px-4 py-3 font-semibold text-slate-700">
-                            Product
-                          </th>
-
-                          <th className="px-4 py-3 font-semibold text-slate-700">
-                            Category
-                          </th>
-
-                          <th className="px-4 py-3 font-semibold text-slate-700">
-                            Unit
-                          </th>
-
-                          <th className="px-4 py-3 font-semibold text-slate-700">
-                            Quantity
-                          </th>
-
-                          <th className="px-4 py-3 font-semibold text-slate-700">
-                            Type
-                          </th>
-                        </tr>
-
-                      </thead>
-
-                      <tbody className="divide-y divide-slate-100">
-
-                        {csvRows
-                          .slice(0, 10)
-                          .map((row, index) => (
-                            <tr key={index}>
-
-                              <td className="px-4 py-3">
-                                {row.date}
-                              </td>
-
-                              <td className="px-4 py-3 font-medium">
-                                {row.product_name}
-                              </td>
-
-                              <td className="px-4 py-3">
-                                {row.category}
-                              </td>
-
-                              <td className="px-4 py-3">
-                                {row.unit}
-                              </td>
-
-                              <td className="px-4 py-3">
-                                {row.quantity}
-                              </td>
-
-                              <td className="px-4 py-3">
-                                {row.transaction_type}
-                              </td>
-
+                              <th className="px-4 py-3 font-semibold">
+                                Type
+                              </th>
                             </tr>
-                          ))}
+                          </thead>
 
-                      </tbody>
+                          <tbody className="divide-y divide-gray-200">
 
-                    </table>
+                            {csvRows
+                              .slice(0, 10)
+                              .map((row, index) => (
+                                <tr
+                                  key={index}
+                                  className="hover:bg-gray-50"
+                                >
+
+                                  <td className="px-4 py-3 text-gray-600">
+                                    {row.date}
+                                  </td>
+
+                                  <td className="px-4 py-3 font-medium text-gray-900">
+                                    {row.product_name}
+                                  </td>
+
+                                  <td className="px-4 py-3 text-gray-600">
+                                    {row.category}
+                                  </td>
+
+                                  <td className="px-4 py-3 text-gray-600">
+                                    {row.unit}
+                                  </td>
+
+                                  <td className="px-4 py-3 text-gray-600">
+                                    {row.quantity}
+                                  </td>
+
+                                  <td className="px-4 py-3 text-gray-600">
+                                    {row.transaction_type}
+                                  </td>
+
+                                </tr>
+                              ))}
+
+                          </tbody>
+
+                        </table>
+
+                      </div>
+                    )}
+
+                    <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCsvReady(false);
+                          setCsvRows([]);
+                          setCsvHeaders([]);
+                          setCsvFileName("");
+                          setMessage("");
+                        }}
+                        disabled={saving}
+                        className="rounded-lg border border-gray-300 px-6 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                      >
+                        Remove File
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={confirmCsvImport}
+                        disabled={saving || !csvReady}
+                        className="rounded-lg bg-gray-900 px-6 py-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {saving
+                          ? "Importing..."
+                          : `Confirm Import (${csvRows.length.toLocaleString()} Rows)`}
+                      </button>
+
+                    </div>
 
                   </div>
+                )}
 
-                  <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+              </div>
+            )}
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCsvReady(false);
-                        setCsvRows([]);
-                        setCsvHeaders([]);
-                        setCsvFileName("");
-                        setMessage("");
-                      }}
-                      disabled={saving}
-                      className="rounded-lg border border-slate-300 px-6 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-                    >
-                      Remove File
-                    </button>
+            {/* PURCHASE */}
+            {active === "purchase" && (
+              <UploadPanel
+                title="Upload Purchase Bill"
+                description="Purchase bill processing will be connected after CSV import."
+                accept=".pdf,.jpg,.jpeg,.png,.csv,.xlsx"
+              />
+            )}
 
-                    <button
-                      type="button"
-                      onClick={confirmCsvImport}
-                      disabled={saving}
-                      className="rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {saving
-                        ? "Importing..."
-                        : `Confirm Import (${csvRows.length.toLocaleString()} Rows)`}
-                    </button>
+            {/* SALES */}
+            {active === "sales" && (
+              <UploadPanel
+                title="Upload Sales Bill"
+                description="Sales bill processing will be connected after CSV import."
+                accept=".pdf,.jpg,.jpeg,.png,.csv,.xlsx"
+              />
+            )}
 
-                  </div>
+            {/* EXTERNAL */}
+            {active === "external" && (
+              <UploadPanel
+                title="Import External Data"
+                description="External data mapping will be connected after the main CSV pipeline is complete."
+                accept=".csv,.xlsx,.xls,.json"
+              />
+            )}
 
-                </div>
-              )}
-
-            </div>
-          )}
-
-          {/* PURCHASE */}
-          {active === "purchase" && (
-            <UploadPanel
-              title="Upload Purchase Bill"
-              description="Purchase bill processing will be connected after CSV import."
-              accept=".pdf,.jpg,.jpeg,.png,.csv,.xlsx"
-            />
-          )}
-
-          {/* SALES */}
-          {active === "sales" && (
-            <UploadPanel
-              title="Upload Sales Bill"
-              description="Sales bill processing will be connected after CSV import."
-              accept=".pdf,.jpg,.jpeg,.png,.csv,.xlsx"
-            />
-          )}
-
-          {/* EXTERNAL */}
-          {active === "external" && (
-            <UploadPanel
-              title="Import External Data"
-              description="External data mapping will be connected after the main CSV pipeline is complete."
-              accept=".csv,.xlsx,.xls,.json"
-            />
-          )}
-
+          </div>
         </div>
 
         {/* IMPORT FLOW */}
-        <div className="mt-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="mt-6 rounded-xl border border-gray-200 bg-white shadow-sm">
 
-          <h2 className="text-lg font-semibold text-slate-900">
-            Import Flow
-          </h2>
+          <div className="border-b border-gray-200 px-6 py-5">
+            <h2 className="text-lg font-semibold text-gray-900">
+              Import Flow
+            </h2>
 
-          <div className="mt-5 grid gap-4 md:grid-cols-4">
+            <p className="mt-1 text-sm text-gray-500">
+              How imported data moves through the inventory system.
+            </p>
+          </div>
+
+          <div className="grid gap-4 p-6 md:grid-cols-2 xl:grid-cols-4">
 
             <FlowStep
               number="1"
               title="Input"
-              description="Upload or provide data from a supported source."
+              description="Provide data from any supported source."
             />
 
             <FlowStep
               number="2"
               title="Validate"
-              description="Check columns, dates, quantities and product information."
+              description="Check fields, products and quantities."
             />
 
             <FlowStep
               number="3"
               title="Store"
-              description="Save validated products and transactions in PostgreSQL."
+              description="Save valid data in the inventory system."
             />
 
             <FlowStep
               number="4"
               title="Forecast"
-              description="Use historical sales data for XGBoost demand prediction."
+              description="Use historical sales data for demand prediction."
             />
 
           </div>
-
         </div>
 
       </div>
-    </div>
+    </AppShell>
   );
 }
 
@@ -896,7 +860,9 @@ function parseCsv(text: string): {
       currentRow.push(
         currentValue.trim()
       );
+
       currentValue = "";
+
       continue;
     }
 
@@ -926,13 +892,17 @@ function parseCsv(text: string): {
 
       currentRow = [];
       currentValue = "";
+
       continue;
     }
 
     currentValue += character;
   }
 
-  if (currentValue.length > 0 || currentRow.length > 0) {
+  if (
+    currentValue.length > 0 ||
+    currentRow.length > 0
+  ) {
     currentRow.push(
       currentValue.trim()
     );
@@ -965,9 +935,7 @@ function parseCsv(text: string): {
  * =========================================================
  */
 
-function validateCsvRows(
-  rows: CsvRow[]
-) {
+function validateCsvRows(rows: CsvRow[]) {
   const errors: string[] = [];
 
   rows.forEach((row, index) => {
@@ -997,8 +965,7 @@ function validateCsvRows(
       );
     }
 
-    const quantity =
-      Number(row.quantity);
+    const quantity = Number(row.quantity);
 
     if (
       !Number.isFinite(quantity) ||
@@ -1009,8 +976,7 @@ function validateCsvRows(
       );
     }
 
-    const costPrice =
-      Number(row.cost_price);
+    const costPrice = Number(row.cost_price);
 
     if (
       !Number.isFinite(costPrice) ||
@@ -1021,8 +987,7 @@ function validateCsvRows(
       );
     }
 
-    const sellingPrice =
-      Number(row.selling_price);
+    const sellingPrice = Number(row.selling_price);
 
     if (
       !Number.isFinite(sellingPrice) ||
@@ -1038,9 +1003,7 @@ function validateCsvRows(
         .trim()
         .toUpperCase();
 
-    if (
-      transactionType !== "SALE"
-    ) {
+    if (transactionType !== "SALE") {
       errors.push(
         `Row ${rowNumber}: transaction_type must be SALE for this import.`
       );
@@ -1051,7 +1014,9 @@ function validateCsvRows(
     throw new Error(
       errors.slice(0, 10).join(" ") +
         (errors.length > 10
-          ? ` ${errors.length - 10} more validation errors.`
+          ? ` ${
+              errors.length - 10
+            } more validation errors.`
           : "")
     );
   }
@@ -1078,7 +1043,7 @@ function Input({
 }) {
   return (
     <div>
-      <label className="mb-2 block text-sm font-medium text-slate-700">
+      <label className="mb-2 block text-sm font-medium text-gray-700">
         {label}
       </label>
 
@@ -1094,7 +1059,7 @@ function Input({
           onChange(e.target.value)
         }
         placeholder={placeholder}
-        className="w-full rounded-lg border border-slate-300 px-4 py-3 text-sm outline-none focus:border-blue-500"
+        className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm outline-none transition focus:border-gray-500 focus:ring-1 focus:ring-gray-200"
       />
     </div>
   );
@@ -1115,31 +1080,26 @@ function UploadPanel({
   description: string;
   accept: string;
 }) {
-  const inputRef =
-    useRef<HTMLInputElement>(null);
-
-  const [fileName, setFileName] =
-    useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-[900px]">
 
       <div
         onClick={() =>
           inputRef.current?.click()
         }
-        className="cursor-pointer rounded-xl border-2 border-dashed border-slate-300 p-10 text-center hover:border-blue-400 hover:bg-blue-50"
+        className="cursor-pointer rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 p-10 text-center transition hover:border-[#159b7b] hover:bg-[#f8fcfb]"
       >
-
         <div className="text-4xl">
           ⇧
         </div>
 
-        <h3 className="mt-3 font-semibold text-slate-900">
+        <h3 className="mt-3 font-semibold text-gray-900">
           {title}
         </h3>
 
-        <p className="mt-2 text-sm text-slate-500">
+        <p className="mx-auto mt-2 max-w-xl text-sm text-gray-500">
           {description}
         </p>
 
@@ -1149,29 +1109,17 @@ function UploadPanel({
             event.stopPropagation();
             inputRef.current?.click();
           }}
-          className="mt-5 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white"
+          className="mt-5 rounded-lg bg-gray-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-gray-800"
         >
           Choose File
         </button>
-
-        {fileName && (
-          <p className="mt-4 text-sm font-medium text-blue-600">
-            Selected: {fileName}
-          </p>
-        )}
-
       </div>
 
       <input
         ref={inputRef}
         type="file"
         accept={accept}
-        onChange={(e) =>
-          setFileName(
-            e.target.files?.[0]?.name ||
-              ""
-          )
-        }
+        onChange={() => {}}
         className="hidden"
       />
 
@@ -1195,21 +1143,17 @@ function FlowStep({
   description: string;
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 p-4">
+    <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
 
-      <div className="flex items-center gap-3">
-
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
-          {number}
-        </div>
-
-        <h3 className="font-semibold text-slate-900">
-          {title}
-        </h3>
-
+      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-900 text-sm font-bold text-white">
+        {number}
       </div>
 
-      <p className="mt-3 text-sm leading-5 text-slate-500">
+      <h3 className="mt-4 font-semibold text-gray-900">
+        {title}
+      </h3>
+
+      <p className="mt-2 text-sm leading-5 text-gray-500">
         {description}
       </p>
 

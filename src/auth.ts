@@ -1,4 +1,4 @@
-﻿import NextAuth from "next-auth";
+import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
@@ -10,6 +10,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     Google({
       clientId: process.env.AUTH_GOOGLE_ID!,
       clientSecret: process.env.AUTH_GOOGLE_SECRET!,
+      allowDangerousEmailAccountLinking: true,
     }),
   ],
 
@@ -17,47 +18,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     strategy: "jwt",
   },
 
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user?.id) {
-        token.id = user.id;
-      }
-
-      return token;
-    },
-
-    async session({ session, token }) {
-      if (session.user) {
-        if (token.id) {
-          session.user.id = token.id as string;
-        }
-
-        if (token.email) {
-          session.user.email = token.email;
-        }
-      }
-
-      return session;
-    },
-
-    async redirect({ url, baseUrl }) {
-      if (url.startsWith("/")) {
-        return `${baseUrl}${url}`;
-      }
-
-      if (url.startsWith(baseUrl)) {
-        return url;
-      }
-
-      return `${baseUrl}/dashboard`;
-    },
-  },
-
   pages: {
     signIn: "/login",
   },
 
   secret: process.env.AUTH_SECRET,
-
-  debug: true,
 });
