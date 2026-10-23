@@ -13,12 +13,101 @@ function formatNumber(value: number) {
   }).format(value);
 }
 
+function formatCurrency(value: number) {
+  return `₹${new Intl.NumberFormat("en-IN", {
+    maximumFractionDigits: 0,
+  }).format(value)}`;
+}
+
 function formatDate(date: Date) {
   return date.toLocaleDateString("en-IN", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
   });
+}
+
+function formatShortDate(date: Date) {
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+  });
+}
+
+function formatTimeAgo(date: Date) {
+  const diff = Math.max(0, Date.now() - date.getTime());
+  const minutes = Math.max(1, Math.floor(diff / 60000));
+
+  if (minutes < 60) {
+    return `${minutes} min ago`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+
+  if (hours < 24) {
+    return `${hours} hr${hours === 1 ? "" : "s"} ago`;
+  }
+
+  const days = Math.floor(hours / 24);
+
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+function getRecommendationCategory(
+  decision: string,
+  reason: string
+) {
+  const text = `${decision} ${reason}`.toLowerCase();
+
+  if (
+    text.includes("slow") ||
+    text.includes("moving")
+  ) {
+    return "Slow Moving";
+  }
+
+  if (
+    text.includes("overstock") ||
+    text.includes("over stock")
+  ) {
+    return "Overstock";
+  }
+
+  if (text.includes("price")) {
+    return "Price";
+  }
+
+  return "Restock";
+}
+
+function getAlertCategory(
+  message: string,
+  severity: string,
+  currentStock: number,
+  minimumStock: number
+) {
+  const text = `${message} ${severity}`.toLowerCase();
+
+  if (
+    text.includes("expir") ||
+    text.includes("expiry")
+  ) {
+    return "Expiry";
+  }
+
+  if (text.includes("price")) {
+    return "Price Change";
+  }
+
+  if (currentStock <= 0) {
+    return "Out of Stock";
+  }
+
+  if (currentStock <= minimumStock) {
+    return "Low Stock";
+  }
+
+  return "Inventory";
 }
 
 export default async function DashboardPage() {
@@ -48,61 +137,31 @@ export default async function DashboardPage() {
   const storeId = user.store.id;
 
   const thirtyDaysAgo = new Date();
-  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-  /*
-   * =========================================================
-   * DASHBOARD DATA
-   * =========================================================
-   */
+  thirtyDaysAgo.setHours(0, 0, 0, 0);
+  thirtyDaysAgo.setDate(
+    thirtyDaysAgo.getDate() - 29
+  );
 
   const [
-    productCount,
-    stockSummary,
-    lowStockCount,
-    outOfStockCount,
+    products,
     activeRecommendations,
     activeAlerts,
     salesTransactions,
     purchaseTransactions,
     recentTransactions,
   ] = await Promise.all([
-    prisma.product.count({
+    prisma.product.findMany({
       where: {
         storeId,
       },
-    }),
-
-    prisma.product.aggregate({
-      where: {
-        storeId,
-      },
-      _sum: {
+      select: {
+        id: true,
+        name: true,
         currentStock: true,
+        minimumStock: true,
       },
     }),
 
-    prisma.product.count({
-      where: {
-        storeId,
-        currentStock: {
-          lte: prisma.product.fields.minimumStock,
-        },
-      },
-    }),
-
-    prisma.product.count({
-      where: {
-        storeId,
-        currentStock: {
-          lte: 0,
-        },
-      },
-    }),
-
-    /*
-     * Layer 8 recommendations
-     */
     prisma.reorderRecommendation.findMany({
       where: {
         storeId,
@@ -122,9 +181,6 @@ export default async function DashboardPage() {
       take: 5,
     }),
 
-    /*
-     * Layer 8 alerts
-     */
     prisma.stockAlert.findMany({
       where: {
         storeId,
@@ -139,27 +195,25 @@ export default async function DashboardPage() {
       take: 5,
     }),
 
-    /*
-     * 30-day sales
-     */
     prisma.inventoryTransaction.findMany({
-      where: {
-        storeId,
-        type: "SALE",
-        createdAt: {
-          gte: thirtyDaysAgo,
-        },
-      },
-      select: {
-        quantity: true,
-        sellingPrice: true,
-        createdAt: true,
-      },
-    }),
+  where: {
+    storeId,
+    type: "PURCHASE",
+    createdAt: {
+      gte: thirtyDaysAgo,
+    },
+  },
+  select: {
+  id: true,
+  quantity: true,
+  createdAt: true,
+  sellingPrice: true,
+},
+  orderBy: {
+    createdAt: "asc",
+  },
+}),
 
-    /*
-     * 30-day purchases
-     */
     prisma.inventoryTransaction.findMany({
       where: {
         storeId,
@@ -169,14 +223,16 @@ export default async function DashboardPage() {
         },
       },
       select: {
+        id: true,
         quantity: true,
+        
         createdAt: true,
+      },
+      orderBy: {
+        createdAt: "asc",
       },
     }),
 
-    /*
-     * Recent transactions
-     */
     prisma.inventoryTransaction.findMany({
       where: {
         storeId,
@@ -187,104 +243,41 @@ export default async function DashboardPage() {
       orderBy: {
         createdAt: "desc",
       },
-      take: 8,
+      take: 5,
     }),
   ]);
 
-  /*
-   * =========================================================
-   * CALCULATIONS
-   * =========================================================
-   */
+  /* =========================================================
+     INVENTORY CALCULATIONS
+     ========================================================= */
 
-  const currentStock = number(
-    stockSummary._sum.currentStock
-  );
+  const productCount = products.length;
 
-  const salesQuantity = salesTransactions.reduce(
-    (sum, transaction) =>
-      sum + number(transaction.quantity),
+  const currentStock = products.reduce(
+    (sum, product) =>
+      sum + number(product.currentStock),
     0
   );
 
-  const salesValue = salesTransactions.reduce(
-    (sum, transaction) =>
-      sum +
-      number(transaction.quantity) *
-        number(transaction.sellingPrice),
-    0
-  );
+  const outOfStockCount = products.filter(
+    (product) =>
+      number(product.currentStock) <= 0
+  ).length;
 
-  const purchaseQuantity =
-    purchaseTransactions.reduce(
-      (sum, transaction) =>
-        sum + number(transaction.quantity),
-      0
-    );
-
-  /*
-   * Daily trend
-   */
-  const salesByDay = new Map<string, number>();
-  const purchasesByDay = new Map<string, number>();
-
-  for (const transaction of salesTransactions) {
-    const day = transaction.createdAt
-      .toISOString()
-      .slice(0, 10);
-
-    salesByDay.set(
-      day,
-      (salesByDay.get(day) ?? 0) +
-        number(transaction.quantity)
-    );
-  }
-
-  for (const transaction of purchaseTransactions) {
-    const day = transaction.createdAt
-      .toISOString()
-      .slice(0, 10);
-
-    purchasesByDay.set(
-      day,
-      (purchasesByDay.get(day) ?? 0) +
-        number(transaction.quantity)
-    );
-  }
-
-  const trendDays = Array.from(
-    { length: 30 },
-    (_, index) => {
-      const date = new Date(thirtyDaysAgo);
-
-      date.setDate(
-        date.getDate() + index
+  const lowStockCount = products.filter(
+    (product) => {
+      const stock = number(
+        product.currentStock
       );
 
-      const key = date
-        .toISOString()
-        .slice(0, 10);
+      const minimum = number(
+        product.minimumStock
+      );
 
-      return {
-        date: key,
-        sales: salesByDay.get(key) ?? 0,
-        purchases:
-          purchasesByDay.get(key) ?? 0,
-      };
+      return stock > 0 && stock <= minimum;
     }
-  );
+  ).length;
 
-  const trendMaximum = Math.max(
-    1,
-    ...trendDays.flatMap((day) => [
-      day.sales,
-      day.purchases,
-    ])
-  );
-
-  /*
-   * Inventory health
-   */
   const healthyCount = Math.max(
     0,
     productCount -
@@ -299,16 +292,207 @@ export default async function DashboardPage() {
           (healthyCount / productCount) * 100
         );
 
-  const today = new Date();
+  /* =========================================================
+     30 DAY OPERATIONS
+     ========================================================= */
 
-  const greetingHour = today.getHours();
+  const salesQuantity =
+    salesTransactions.reduce(
+      (sum, transaction) =>
+        sum + number(transaction.quantity),
+      0
+    );
+
+  const salesValue =
+    salesTransactions.reduce(
+      (sum, transaction) =>
+        sum +
+        number(transaction.quantity) *
+          number(transaction.sellingPrice),
+      0
+    );
+
+  const purchaseQuantity =
+    purchaseTransactions.reduce(
+      (sum, transaction) =>
+        sum + number(transaction.quantity),
+      0
+    );
+
+  const transactionCount =
+    salesTransactions.length +
+    purchaseTransactions.length;
+
+  /* =========================================================
+     DAILY TREND DATA
+     ========================================================= */
+
+  const salesByDay = new Map<string, number>();
+  const purchasesByDay = new Map<
+    string,
+    number
+  >();
+
+  for (const transaction of salesTransactions) {
+    const key = transaction.createdAt
+      .toISOString()
+      .slice(0, 10);
+
+    salesByDay.set(
+      key,
+      (salesByDay.get(key) ?? 0) +
+        number(transaction.quantity)
+    );
+  }
+
+  for (const transaction of purchaseTransactions) {
+    const key = transaction.createdAt
+      .toISOString()
+      .slice(0, 10);
+
+    purchasesByDay.set(
+      key,
+      (purchasesByDay.get(key) ?? 0) +
+        number(transaction.quantity)
+    );
+  }
+
+  const trendDays = Array.from(
+    { length: 30 },
+    (_, index) => {
+      const date = new Date(
+        thirtyDaysAgo
+      );
+
+      date.setDate(
+        date.getDate() + index
+      );
+
+      const key = date
+        .toISOString()
+        .slice(0, 10);
+
+      return {
+        date: key,
+        label: formatShortDate(date),
+        sales: salesByDay.get(key) ?? 0,
+        purchases:
+          purchasesByDay.get(key) ?? 0,
+      };
+    }
+  );
+
+  const trendMaximum = Math.max(
+    10,
+    ...trendDays.flatMap((day) => [
+      day.sales,
+      day.purchases,
+    ])
+  );
+
+  /* =========================================================
+     CATEGORY COUNTS
+     ========================================================= */
+
+  const recommendationCategories = {
+    all: activeRecommendations.length,
+
+    restock: activeRecommendations.filter(
+      (item) =>
+        getRecommendationCategory(
+          item.decision,
+          item.reason || ""
+        ) === "Restock"
+    ).length,
+
+    slowMoving:
+      activeRecommendations.filter(
+        (item) =>
+          getRecommendationCategory(
+            item.decision,
+            item.reason || ""
+          ) === "Slow Moving"
+      ).length,
+
+    overstock:
+      activeRecommendations.filter(
+        (item) =>
+          getRecommendationCategory(
+            item.decision,
+            item.reason || ""
+          ) === "Overstock"
+      ).length,
+
+    price: activeRecommendations.filter(
+      (item) =>
+        getRecommendationCategory(
+          item.decision,
+          item.reason || ""
+        ) === "Price"
+    ).length,
+  };
+
+  const alertCategories = {
+    all: activeAlerts.length,
+
+    outOfStock:
+      activeAlerts.filter(
+        (item) =>
+          number(item.currentStock) <= 0
+      ).length,
+
+    lowStock: activeAlerts.filter(
+      (item) => {
+        const current = number(
+          item.currentStock
+        );
+
+        const minimum = number(
+          item.minimumStock
+        );
+
+        return (
+          current > 0 &&
+          current <= minimum
+        );
+      }
+    ).length,
+
+    expiry: activeAlerts.filter(
+      (item) =>
+        getAlertCategory(
+          item.message,
+          item.severity,
+          number(item.currentStock),
+          number(item.minimumStock)
+        ) === "Expiry"
+    ).length,
+
+    price: activeAlerts.filter(
+      (item) =>
+        getAlertCategory(
+          item.message,
+          item.severity,
+          number(item.currentStock),
+          number(item.minimumStock)
+        ) === "Price Change"
+    ).length,
+  };
+
+  /* =========================================================
+     GREETING
+     ========================================================= */
+
+  const now = new Date();
+
+  const hour = now.getHours();
 
   const greeting =
-    greetingHour < 12
-      ? "Good Morning!"
-      : greetingHour < 17
-      ? "Good Afternoon!"
-      : "Good Evening!";
+    hour < 12
+      ? "Good Morning"
+      : hour < 17
+      ? "Good Afternoon"
+      : "Good Evening";
 
   return (
     <AppShell
@@ -318,75 +502,53 @@ export default async function DashboardPage() {
     >
       {/* =====================================================
           WELCOME HEADER
-      ===================================================== */}
+          ===================================================== */}
 
-      <section
-        className="
-          relative
-          overflow-hidden
-          rounded-2xl
-          border
-          border-[#dceee7]
-          bg-gradient-to-r
-          from-[#eefaf5]
-          via-white
-          to-[#e7f8f0]
-          p-6
-        "
-      >
-        <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-[#102d25]">
-              {greeting} 👋
-            </h1>
+      <section className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-[25px] font-bold tracking-tight text-[#102d25]">
+            {greeting}, {user.name || "there"}! 👋
+          </h1>
 
-            <p className="mt-1 text-sm font-semibold text-[#315c4e]">
-              {user.store.name}
-            </p>
-
-            <p className="mt-1 text-sm text-[#718c83]">
-              Here's your store performance
-              overview.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-4">
-            <div className="hidden rounded-xl border border-[#dceae5] bg-white px-5 py-3 shadow-sm sm:block">
-              <p className="text-xs font-medium text-[#7a918a]">
-                Today
-              </p>
-
-              <p className="mt-1 text-sm font-bold text-[#173b30]">
-                {today.toLocaleDateString(
-                  "en-IN",
-                  {
-                    weekday: "long",
-                    day: "numeric",
-                    month: "long",
-                    year: "numeric",
-                  }
-                )}
-              </p>
-            </div>
-          </div>
+          <p className="mt-1 text-sm text-[#70877f]">
+            Here's what's happening with your
+            store today.
+          </p>
         </div>
 
-        {/* Decorative circles */}
-        <div className="absolute -right-8 -top-16 h-44 w-44 rounded-full border-[18px] border-[#ccecdf] opacity-60" />
-        <div className="absolute -right-20 -bottom-24 h-48 w-48 rounded-full border-[18px] border-[#d9f1e7] opacity-60" />
+        <div className="flex items-center gap-3">
+          <div className="rounded-xl border border-[#dce9e5] bg-white px-4 py-2.5 shadow-sm">
+            <p className="text-[10px] font-medium text-[#83968f]">
+              Today
+            </p>
+
+            <p className="mt-0.5 text-xs font-bold text-[#203d34]">
+              {now.toLocaleDateString(
+                "en-IN",
+                {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "short",
+                  year: "numeric",
+                }
+              )}
+            </p>
+          </div>
+        </div>
       </section>
 
       {/* =====================================================
           KPI CARDS
-      ===================================================== */}
+          ===================================================== */}
 
-      <section className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <KpiCard
           title="Total Products"
           value={formatNumber(productCount)}
           icon="▣"
           tone="green"
-          change="+0% from last month"
+          change="+0%"
+          label="vs last month"
           direction="up"
         />
 
@@ -395,8 +557,9 @@ export default async function DashboardPage() {
           value={formatNumber(currentStock)}
           icon="◈"
           tone="blue"
-          change="-12% from last month"
-          direction="down"
+          change="+0%"
+          label="vs last month"
+          direction="up"
         />
 
         <KpiCard
@@ -404,8 +567,9 @@ export default async function DashboardPage() {
           value={formatNumber(lowStockCount)}
           icon="!"
           tone="yellow"
-          change="-50% from last month"
-          direction="down"
+          change="+0%"
+          label="vs last month"
+          direction="up"
         />
 
         <KpiCard
@@ -413,7 +577,8 @@ export default async function DashboardPage() {
           value={formatNumber(outOfStockCount)}
           icon="×"
           tone="red"
-          change="+10% from last month"
+          change="+0%"
+          label="vs last month"
           direction="up"
         />
 
@@ -424,7 +589,8 @@ export default async function DashboardPage() {
           )}
           icon="✦"
           tone="purple"
-          change="+0% from last month"
+          change="+0%"
+          label="vs last month"
           direction="up"
         />
 
@@ -436,15 +602,16 @@ export default async function DashboardPage() {
           icon="♧"
           tone="cyan"
           change="No change"
+          label=""
           direction="none"
         />
       </section>
 
       {/* =====================================================
-          HEALTH + OPERATIONS + TREND
-      ===================================================== */}
+          HEALTH / OPERATIONS / TREND
+          ===================================================== */}
 
-      <section className="mt-5 grid gap-4 xl:grid-cols-[1.15fr_0.9fr_1.15fr]">
+      <section className="mt-4 grid gap-4 xl:grid-cols-[1.15fr_0.9fr_1.15fr]">
         {/* INVENTORY HEALTH */}
 
         <DashboardSection
@@ -452,95 +619,144 @@ export default async function DashboardPage() {
           subtitle="Current stock condition across your products."
           icon="♥"
           iconTone="green"
-        >
-          <div className="flex items-center justify-between">
+          action={
             <span
-              className={`rounded-md px-3 py-1 text-xs font-semibold ${
-                inventoryHealth < 50
-                  ? "bg-red-50 text-red-600"
-                  : inventoryHealth < 80
-                  ? "bg-yellow-50 text-yellow-700"
-                  : "bg-green-50 text-green-700"
+              className={`rounded-lg px-3 py-1.5 text-[10px] font-bold ${
+                inventoryHealth >= 80
+                  ? "bg-[#e4f8ee] text-[#129664]"
+                  : inventoryHealth >= 50
+                  ? "bg-[#fff3cf] text-[#b87b00]"
+                  : "bg-[#ffe5e8] text-[#df3650]"
               }`}
             >
-              {inventoryHealth < 50
-                ? "Needs Attention"
-                : inventoryHealth < 80
-                ? "Monitor"
-                : "Healthy"}
+              {inventoryHealth >= 80
+                ? "● Good"
+                : inventoryHealth >= 50
+                ? "● Monitor"
+                : "● Needs Attention"}
             </span>
+          }
+        >
+          <div className="flex items-center gap-5">
+            <InventoryDonut
+              healthy={healthyCount}
+              low={lowStockCount}
+              out={outOfStockCount}
+              total={productCount}
+            />
 
-            <span className="text-3xl font-bold text-[#10251f]">
-              {inventoryHealth}%
-            </span>
+            <div className="min-w-0 flex-1 space-y-4">
+              <InventoryLegend
+                color="bg-[#20a875]"
+                label="Healthy Stock"
+                count={healthyCount}
+                percentage={getPercentage(
+                  healthyCount,
+                  productCount
+                )}
+              />
+
+              <InventoryLegend
+                color="bg-[#f7b51c]"
+                label="Low Stock"
+                count={lowStockCount}
+                percentage={getPercentage(
+                  lowStockCount,
+                  productCount
+                )}
+              />
+
+              <InventoryLegend
+                color="bg-[#ef4760]"
+                label="Out of Stock"
+                count={outOfStockCount}
+                percentage={getPercentage(
+                  outOfStockCount,
+                  productCount
+                )}
+              />
+            </div>
           </div>
 
-          <div className="mt-5 h-3 overflow-hidden rounded-full bg-[#edf2f0]">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-[#22a879] to-[#54c99c]"
-              style={{
-                width: `${inventoryHealth}%`,
-              }}
-            />
-          </div>
+          <div className="mt-4 flex items-center justify-between rounded-xl border border-[#dcefea] bg-[#f0faf6] px-3 py-2.5">
+            <div className="flex items-center gap-2">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#d9f2e7] text-sm">
+                💡
+              </span>
 
-          <div className="mt-5 flex flex-wrap gap-x-5 gap-y-3 text-xs">
-            <Legend
-              label={`Healthy: ${healthyCount}`}
-              className="bg-[#20a56f]"
-            />
+              <p className="text-[10px] font-medium text-[#317160]">
+                {outOfStockCount > 0
+                  ? `${outOfStockCount} products are out of stock. Restock soon to avoid lost sales.`
+                  : lowStockCount > 0
+                  ? `${lowStockCount} products need attention. Consider restocking soon.`
+                  : "Your inventory is in good condition."}
+              </p>
+            </div>
 
-            <Legend
-              label={`Low stock: ${lowStockCount}`}
-              className="bg-[#f6b51b]"
-            />
-
-            <Legend
-              label={`Out of stock: ${outOfStockCount}`}
-              className="bg-[#ef4760]"
-            />
+            <a
+              href="/dashboard/inventory"
+              className="hidden text-[10px] font-bold text-[#128c67] sm:block"
+            >
+              View Details →
+            </a>
           </div>
         </DashboardSection>
 
-        {/* 30-DAY OPERATIONS */}
+        {/* 30 DAY OPERATIONS */}
 
         <DashboardSection
           title="30-Day Operations"
-          subtitle="Activity recorded during the last 30 days."
+          subtitle="Key metrics from the last 30 days."
           icon="▥"
           iconTone="blue"
           action={
             <a
               href="/dashboard/reports"
-              className="text-xs font-semibold text-[#168968] hover:underline"
+              className="text-[10px] font-bold text-[#138d69]"
             >
               View Details →
             </a>
           }
         >
-          <div className="grid grid-cols-3 gap-2">
-            <MiniMetric
+          <div className="grid grid-cols-2 gap-2.5">
+            <OperationMetric
               label="Units Sold"
               value={formatNumber(
                 salesQuantity
               )}
+              change="+0%"
               tone="green"
+              icon="🛒"
             />
 
-            <MiniMetric
+            <OperationMetric
               label="Sales Value"
-              value={`₹${formatNumber(
+              value={formatCurrency(
                 salesValue
-              )}`}
+              )}
+              change="+0%"
               tone="blue"
+              icon="₹"
             />
 
-            <MiniMetric
+            <OperationMetric
               label="Units Purchased"
               value={formatNumber(
                 purchaseQuantity
               )}
+              change="+0%"
               tone="purple"
+              icon="📦"
+            />
+
+            <OperationMetric
+              label="Transactions"
+              value={formatNumber(
+                transactionCount
+              )}
+              change="+0%"
+              tone="yellow"
+              icon="▤"
             />
           </div>
         </DashboardSection>
@@ -552,100 +768,110 @@ export default async function DashboardPage() {
           subtitle="Daily sales and purchase quantities."
           icon="⌁"
           iconTone="blue"
+          action={
+            <span className="rounded-lg border border-[#dce7e4] bg-white px-3 py-1.5 text-[9px] font-semibold text-[#566f66]">
+              Last 30 Days⌄
+            </span>
+          }
         >
-          <div className="flex items-center justify-end gap-4 text-[11px]">
-            <span className="flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-[#20a56f]" />
-              Sales
+          <div className="flex items-center justify-end gap-4 text-[10px]">
+            <span className="flex items-center gap-1.5 text-[#526d64]">
+              <span className="h-2 w-2 rounded-full bg-[#20a875]" />
+              Sales (Units)
             </span>
 
-            <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1.5 text-[#526d64]">
               <span className="h-2 w-2 rounded-full bg-[#287ce0]" />
-              Purchases
+              Purchases (Units)
             </span>
           </div>
 
-          <div className="mt-4 flex h-[125px] items-end gap-[3px] overflow-hidden rounded-xl bg-[#f7faf9] px-2 pt-3">
-            {trendDays.map((day) => (
-              <div
-                key={day.date}
-                className="flex h-full min-w-[6px] flex-1 items-end justify-center gap-[1px]"
-                title={`${day.date} — Sales: ${day.sales}, Purchases: ${day.purchases}`}
-              >
-                <div
-                  className="w-1/2 rounded-t-sm bg-[#20a56f]"
-                  style={{
-                    height: `${Math.max(
-                      day.sales > 0 ? 3 : 1,
-                      (day.sales /
-                        trendMaximum) *
-                        100
-                    )}%`,
-                  }}
-                />
+          <RealisticTrendChart
+            days={trendDays}
+            maximum={trendMaximum}
+          />
 
-                <div
-                  className="w-1/2 rounded-t-sm bg-[#287ce0]"
-                  style={{
-                    height: `${Math.max(
-                      day.purchases > 0
-                        ? 3
-                        : 1,
-                      (day.purchases /
-                        trendMaximum) *
-                        100
-                    )}%`,
-                  }}
-                />
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-3 flex justify-between text-[10px] text-[#91a39d]">
+          <div className="flex justify-between px-1 text-[9px] text-[#899b94]">
             <span>
-              {trendDays[0].date.slice(
-                5
-              )}
+              {trendDays[0]?.label}
             </span>
 
             <span>
               {trendDays[
                 trendDays.length - 1
-              ].date.slice(5)}
+              ]?.label}
             </span>
           </div>
         </DashboardSection>
       </section>
 
       {/* =====================================================
-          AI RECOMMENDATIONS + ALERTS
-      ===================================================== */}
+          AI + ALERTS
+          ===================================================== */}
 
-      <section className="mt-5 grid gap-4 xl:grid-cols-2">
+      <section className="mt-4 grid gap-4 xl:grid-cols-2">
         {/* AI RECOMMENDATIONS */}
 
         <DashboardSection
           title="AI Recommendations"
-          subtitle="Recommendations generated by Layer 8."
+          subtitle="Smart suggestions to optimize your inventory and reduce losses."
           icon="✦"
           iconTone="purple"
           action={
             <a
               href="/dashboard/inventory"
-              className="text-xs font-semibold text-[#168968] hover:underline"
+              className="text-[10px] font-bold text-[#138d69]"
             >
               View all →
             </a>
           }
         >
-          <div className="space-y-2">
+          <div className="flex overflow-x-auto border-b border-[#edf1ef]">
+            <RecommendationTab
+              label="All"
+              count={
+                recommendationCategories.all
+              }
+              active
+            />
+
+            <RecommendationTab
+              label="Restock"
+              count={
+                recommendationCategories.restock
+              }
+            />
+
+            <RecommendationTab
+              label="Slow Moving"
+              count={
+                recommendationCategories.slowMoving
+              }
+            />
+
+            <RecommendationTab
+              label="Overstock"
+              count={
+                recommendationCategories.overstock
+              }
+            />
+
+            <RecommendationTab
+              label="Price"
+              count={
+                recommendationCategories.price
+              }
+            />
+          </div>
+
+          <div className="mt-2 space-y-2">
             {activeRecommendations.length ===
             0 ? (
-              <EmptyState text="No active recommendations." />
+              <EmptyState text="No active AI recommendations." />
             ) : (
               activeRecommendations.map(
                 (recommendation) => (
-                  <RecommendationRow
+                  <AdvancedRecommendationRow
                     key={recommendation.id}
                     productName={
                       recommendation.product
@@ -678,90 +904,112 @@ export default async function DashboardPage() {
 
         <DashboardSection
           title="Active Alerts"
-          subtitle="Current inventory alerts from Layer 8."
+          subtitle="Important inventory alerts that need your attention."
           icon="♧"
           iconTone="red"
           action={
             <a
               href="/dashboard/alerts"
-              className="text-xs font-semibold text-[#168968] hover:underline"
+              className="text-[10px] font-bold text-[#138d69]"
             >
               View all →
             </a>
           }
         >
-          {activeAlerts.length === 0 ? (
-            <div className="flex min-h-[260px] flex-col items-center justify-center rounded-xl border border-[#e1ece8] bg-gradient-to-b from-[#fbfefd] to-[#f4faf7] text-center">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#e8f7f0] text-3xl">
-                🔔
-              </div>
+          <div className="flex gap-2 overflow-x-auto border-b border-[#edf1ef] pb-2">
+            <AlertTab
+              label="All"
+              count={alertCategories.all}
+              active
+            />
 
-              <p className="mt-4 text-sm font-semibold text-[#284d42]">
-                No active inventory alerts.
-              </p>
+            <AlertTab
+              label="Out of Stock"
+              count={
+                alertCategories.outOfStock
+              }
+            />
 
-              <p className="mt-1 max-w-xs text-xs text-[#8a9d96]">
-                You're all caught up! We'll
-                notify you when attention is
-                needed.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {activeAlerts.map((alert) => (
-                <div
-                  key={alert.id}
-                  className="rounded-xl border border-[#e6ebe9] bg-white p-4"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-bold text-[#19372f]">
-                        {alert.product.name}
-                      </p>
+            <AlertTab
+              label="Low Stock"
+              count={
+                alertCategories.lowStock
+              }
+            />
 
-                      <p className="mt-1 text-xs text-[#72877f]">
-                        {alert.message}
-                      </p>
+            <AlertTab
+              label="Expiry"
+              count={
+                alertCategories.expiry
+              }
+            />
 
-                      <p className="mt-2 text-xs text-[#607a70]">
-                        Stock:{" "}
-                        {number(
-                          alert.currentStock
-                        )}{" "}
-                        / Minimum:{" "}
-                        {number(
-                          alert.minimumStock
-                        )}
-                      </p>
-                    </div>
+            <AlertTab
+              label="Price Change"
+              count={
+                alertCategories.price
+              }
+            />
+          </div>
 
-                    <span className="rounded-md bg-red-50 px-3 py-1 text-[10px] font-bold uppercase text-red-600">
-                      {alert.severity}
-                    </span>
-                  </div>
+          <div className="mt-2 space-y-2">
+            {activeAlerts.length === 0 ? (
+              <div className="flex min-h-[255px] flex-col items-center justify-center rounded-xl border border-[#e0ebe7] bg-gradient-to-b from-[#fbfefd] to-[#f4faf7] text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#e7f7f0] text-3xl">
+                  🔔
                 </div>
-              ))}
-            </div>
-          )}
+
+                <p className="mt-4 text-sm font-bold text-[#203e35]">
+                  No active inventory alerts.
+                </p>
+
+                <p className="mt-1 max-w-sm text-xs text-[#8a9c95]">
+                  You're all caught up! We'll
+                  notify you when attention is
+                  needed.
+                </p>
+              </div>
+            ) : (
+              activeAlerts.map((alert) => (
+                <AdvancedAlertRow
+                  key={alert.id}
+                  productName={
+                    alert.product.name
+                  }
+                  message={alert.message}
+                  severity={alert.severity}
+                  currentStock={number(
+                    alert.currentStock
+                  )}
+                  minimumStock={number(
+                    alert.minimumStock
+                  )}
+                  createdAt={
+                    alert.createdAt
+                  }
+                />
+              ))
+            )}
+          </div>
         </DashboardSection>
       </section>
 
       {/* =====================================================
-          RECENT TRANSACTIONS + QUICK ACTIONS
-      ===================================================== */}
+          TRANSACTIONS + QUICK ACTIONS
+          ===================================================== */}
 
-      <section className="mt-5 grid gap-4 xl:grid-cols-2">
+      <section className="mt-4 grid gap-4 xl:grid-cols-2">
         {/* RECENT TRANSACTIONS */}
 
         <DashboardSection
           title="Recent Inventory Transactions"
-          subtitle="Latest inventory transactions."
+          subtitle="Latest stock movements in your store."
           icon="◷"
           iconTone="green"
           action={
             <a
               href="/dashboard/inventory"
-              className="text-xs font-semibold text-[#168968] hover:underline"
+              className="text-[10px] font-bold text-[#138d69]"
             >
               View all →
             </a>
@@ -771,51 +1019,72 @@ export default async function DashboardPage() {
           0 ? (
             <EmptyState text="No inventory activity yet." />
           ) : (
-            <div className="overflow-hidden rounded-xl border border-[#e0e9e5]">
-              <div className="grid grid-cols-[1.6fr_0.7fr_0.7fr_0.9fr] bg-[#f8fbfa] px-3 py-2 text-[10px] font-semibold text-[#789087]">
+            <div className="overflow-hidden rounded-xl border border-[#dfe9e5]">
+              <div className="grid grid-cols-[2fr_0.8fr_0.65fr_1fr_1fr] gap-2 bg-[#f7faf9] px-3 py-2.5 text-[9px] font-bold uppercase tracking-wide text-[#71877f]">
                 <span>Product</span>
                 <span>Type</span>
-                <span>Quantity</span>
+                <span>Qty</span>
                 <span>Date</span>
+                <span>Status</span>
               </div>
 
-              {recentTransactions
-                .slice(0, 5)
-                .map((transaction) => (
-                  <div
-                    key={transaction.id}
-                    className="grid grid-cols-[1.6fr_0.7fr_0.7fr_0.9fr] items-center border-t border-[#edf1ef] px-3 py-2.5 text-[11px]"
-                  >
-                    <span className="truncate font-semibold text-[#294a40]">
-                      {transaction.product.name}
-                    </span>
+              {recentTransactions.map(
+                (transaction) => {
+                  const isSale =
+                    transaction.type ===
+                    "SALE";
 
-                    <span
-                      className={`font-semibold ${
-                        transaction.type ===
-                        "SALE"
-                          ? "text-[#168968]"
-                          : "text-[#4776bd]"
-                      }`}
+                  return (
+                    <div
+                      key={transaction.id}
+                      className="grid grid-cols-[2fr_0.8fr_0.65fr_1fr_1fr] items-center gap-2 border-t border-[#edf1ef] px-3 py-3 transition hover:bg-[#fbfdfc]"
                     >
-                      {transaction.type}
-                    </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-[10px] font-bold text-[#203d34]">
+                          {
+                            transaction.product
+                              .name
+                          }
+                        </p>
 
-                    <span className="text-[#4e675e]">
-                      {formatNumber(
-                        number(
-                          transaction.quantity
-                        )
-                      )}
-                    </span>
+                        <p className="mt-0.5 text-[8px] text-[#91a29c]">
+                          {formatTimeAgo(
+                            transaction.createdAt
+                          )}
+                        </p>
+                      </div>
 
-                    <span className="text-[#84958f]">
-                      {formatDate(
-                        transaction.createdAt
-                      )}
-                    </span>
-                  </div>
-                ))}
+                      <span
+                        className={`w-fit rounded-md px-2 py-1 text-[8px] font-bold ${
+                          isSale
+                            ? "bg-[#dff6eb] text-[#15966a]"
+                            : "bg-[#e4efff] text-[#287ce0]"
+                        }`}
+                      >
+                        {transaction.type}
+                      </span>
+
+                      <span className="text-[10px] font-semibold text-[#4f6960]">
+                        {formatNumber(
+                          number(
+                            transaction.quantity
+                          )
+                        )}
+                      </span>
+
+                      <span className="text-[9px] text-[#71877f]">
+                        {formatDate(
+                          transaction.createdAt
+                        )}
+                      </span>
+
+                      <span className="w-fit rounded-md bg-[#e4f7ee] px-2 py-1 text-[8px] font-bold text-[#15966a]">
+                        Completed
+                      </span>
+                    </div>
+                  );
+                }
+              )}
             </div>
           )}
         </DashboardSection>
@@ -862,6 +1131,8 @@ export default async function DashboardPage() {
             />
           </div>
 
+          {/* KEEP AS IT IS */}
+
           <div className="mt-3 flex items-center gap-4 overflow-hidden rounded-xl bg-gradient-to-r from-[#eaf8f2] to-[#f3fbf8] p-4">
             <div className="text-4xl">
               🏪
@@ -884,11 +1155,455 @@ export default async function DashboardPage() {
   );
 }
 
-/*
- * =========================================================
- * KPI CARD
- * =========================================================
- */
+/* ============================================================
+   INVENTORY DONUT
+   ============================================================ */
+
+function InventoryDonut({
+  healthy,
+  low,
+  out,
+  total,
+}: {
+  healthy: number;
+  low: number;
+  out: number;
+  total: number;
+}) {
+  const radius = 55;
+  const circumference =
+    2 * Math.PI * radius;
+
+  const healthyLength =
+    total > 0
+      ? (healthy / total) * circumference
+      : 0;
+
+  const lowLength =
+    total > 0
+      ? (low / total) * circumference
+      : 0;
+
+  const outLength =
+    total > 0
+      ? (out / total) * circumference
+      : 0;
+
+  const healthyOffset = 0;
+
+  const lowOffset =
+    -healthyLength;
+
+  const outOffset =
+    -(healthyLength + lowLength);
+
+  return (
+    <div className="relative h-[150px] w-[150px] shrink-0">
+      <svg
+        viewBox="0 0 150 150"
+        className="h-full w-full -rotate-90"
+      >
+        <circle
+          cx="75"
+          cy="75"
+          r={radius}
+          fill="none"
+          stroke="#edf2f0"
+          strokeWidth="19"
+        />
+
+        {total > 0 && (
+          <>
+            <circle
+              cx="75"
+              cy="75"
+              r={radius}
+              fill="none"
+              stroke="#20a875"
+              strokeWidth="19"
+              strokeDasharray={`${healthyLength} ${circumference}`}
+              strokeDashoffset={
+                healthyOffset
+              }
+              strokeLinecap="butt"
+            />
+
+            <circle
+              cx="75"
+              cy="75"
+              r={radius}
+              fill="none"
+              stroke="#f7b51c"
+              strokeWidth="19"
+              strokeDasharray={`${lowLength} ${circumference}`}
+              strokeDashoffset={
+                lowOffset
+              }
+              strokeLinecap="butt"
+            />
+
+            <circle
+              cx="75"
+              cy="75"
+              r={radius}
+              fill="none"
+              stroke="#ef4760"
+              strokeWidth="19"
+              strokeDasharray={`${outLength} ${circumference}`}
+              strokeDashoffset={
+                outOffset
+              }
+              strokeLinecap="butt"
+            />
+          </>
+        )}
+      </svg>
+
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+        <p className="text-[22px] font-bold text-[#102d25]">
+          {total}
+        </p>
+
+        <p className="text-[9px] leading-3 text-[#70867e]">
+          Total
+          <br />
+          Products
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   INVENTORY LEGEND
+   ============================================================ */
+
+function InventoryLegend({
+  color,
+  label,
+  count,
+  percentage,
+}: {
+  color: string;
+  label: string;
+  count: number;
+  percentage: number;
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span
+        className={`h-3 w-3 rounded-full ${color}`}
+      />
+
+      <span className="flex-1 text-[11px] font-medium text-[#526b62]">
+        {label}
+      </span>
+
+      <span className="w-7 text-right text-[11px] font-bold text-[#243e35]">
+        {count}
+      </span>
+
+      <span
+        className={`w-9 text-right text-[11px] font-bold ${
+          color.includes("20a875")
+            ? "text-[#14966a]"
+            : color.includes("f7b51c")
+            ? "text-[#d99800]"
+            : "text-[#e63d54]"
+        }`}
+      >
+        {percentage}%
+      </span>
+    </div>
+  );
+}
+
+/* ============================================================
+   REALISTIC TREND CHART
+   ============================================================ */
+
+function RealisticTrendChart({
+  days,
+  maximum,
+}: {
+  days: {
+    date: string;
+    label: string;
+    sales: number;
+    purchases: number;
+  }[];
+  maximum: number;
+}) {
+  const width = 650;
+  const height = 220;
+
+  const left = 38;
+  const right = 12;
+  const top = 12;
+  const bottom = 28;
+
+  const chartWidth =
+    width - left - right;
+
+  const chartHeight =
+    height - top - bottom;
+
+  const getPoint = (
+    value: number,
+    index: number
+  ) => {
+    const x =
+      left +
+      (index /
+        Math.max(1, days.length - 1)) *
+        chartWidth;
+
+    const y =
+      top +
+      chartHeight -
+      (value / maximum) * chartHeight;
+
+    return { x, y };
+  };
+
+  const salesPoints = days.map(
+    (day, index) =>
+      getPoint(day.sales, index)
+  );
+
+  const purchasePoints = days.map(
+    (day, index) =>
+      getPoint(day.purchases, index)
+  );
+
+  const smoothPath = (
+    points: { x: number; y: number }[]
+  ) => {
+    if (!points.length) return "";
+
+    let path = `M ${points[0].x} ${points[0].y}`;
+
+    for (
+      let i = 1;
+      i < points.length;
+      i++
+    ) {
+      const previous =
+        points[i - 1];
+
+      const current = points[i];
+
+      const controlX =
+        (previous.x + current.x) / 2;
+
+      path += ` C ${controlX} ${previous.y}, ${controlX} ${current.y}, ${current.x} ${current.y}`;
+    }
+
+    return path;
+  };
+
+  const salesPath =
+    smoothPath(salesPoints);
+
+  const purchasePath =
+    smoothPath(purchasePoints);
+
+  const salesArea =
+    `${salesPath} L ${salesPoints.at(-1)?.x ?? left} ${top + chartHeight} L ${left} ${top + chartHeight} Z`;
+
+  const purchaseArea =
+    `${purchasePath} L ${purchasePoints.at(-1)?.x ?? left} ${top + chartHeight} L ${left} ${top + chartHeight} Z`;
+
+  const ySteps = 4;
+
+  return (
+    <div className="mt-2 overflow-hidden rounded-xl bg-[#f8fbfa]">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="h-[185px] w-full"
+        preserveAspectRatio="none"
+      >
+        <defs>
+          <linearGradient
+            id="salesArea"
+            x1="0"
+            y1="0"
+            x2="0"
+            y2="1"
+          >
+            <stop
+              offset="0%"
+              stopColor="#20a875"
+              stopOpacity="0.18"
+            />
+
+            <stop
+              offset="100%"
+              stopColor="#20a875"
+              stopOpacity="0"
+            />
+          </linearGradient>
+
+          <linearGradient
+            id="purchaseArea"
+            x1="0"
+            y1="0"
+            x2="0"
+            y2="1"
+          >
+            <stop
+              offset="0%"
+              stopColor="#287ce0"
+              stopOpacity="0.13"
+            />
+
+            <stop
+              offset="100%"
+              stopColor="#287ce0"
+              stopOpacity="0"
+            />
+          </linearGradient>
+        </defs>
+
+        {/* GRID */}
+
+        {Array.from(
+          { length: ySteps + 1 },
+          (_, index) => {
+            const y =
+              top +
+              (index / ySteps) *
+                chartHeight;
+
+            const value = Math.round(
+              maximum -
+                (index / ySteps) *
+                  maximum
+            );
+
+            return (
+              <g key={`grid-${index}`}>
+                <line
+                  x1={left}
+                  x2={width - right}
+                  y1={y}
+                  y2={y}
+                  stroke="#e5eeeb"
+                  strokeWidth="1"
+                />
+
+                <text
+                  x="4"
+                  y={y + 3}
+                  fontSize="9"
+                  fill="#91a29b"
+                >
+                  {value}
+                </text>
+              </g>
+            );
+          }
+        )}
+
+        {/* VERTICAL GUIDES */}
+
+        {[0, 5, 10, 15, 20, 25, 29].map(
+          (index) => {
+            const point =
+              getPoint(
+                0,
+                index
+              );
+
+            return (
+              <line
+                key={`vertical-${index}`}
+                x1={point.x}
+                x2={point.x}
+                y1={top}
+                y2={
+                  top + chartHeight
+                }
+                stroke="#edf3f1"
+                strokeWidth="1"
+              />
+            );
+          }
+        )}
+
+        {/* AREAS */}
+
+        {salesPoints.length > 0 && (
+          <path
+            d={salesArea}
+            fill="url(#salesArea)"
+          />
+        )}
+
+        {purchasePoints.length > 0 && (
+          <path
+            d={purchaseArea}
+            fill="url(#purchaseArea)"
+          />
+        )}
+
+        {/* LINES */}
+
+        <path
+          d={salesPath}
+          fill="none"
+          stroke="#20a875"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        <path
+          d={purchasePath}
+          fill="none"
+          stroke="#287ce0"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+
+        {/* POINTS */}
+
+        {salesPoints.map(
+          (point, index) => (
+            <circle
+              key={`sale-point-${index}`}
+              cx={point.x}
+              cy={point.y}
+              r="2.7"
+              fill="white"
+              stroke="#20a875"
+              strokeWidth="2"
+            />
+          )
+        )}
+
+        {purchasePoints.map(
+          (point, index) => (
+            <circle
+              key={`purchase-point-${index}`}
+              cx={point.x}
+              cy={point.y}
+              r="2.7"
+              fill="white"
+              stroke="#287ce0"
+              strokeWidth="2"
+            />
+          )
+        )}
+      </svg>
+    </div>
+  );
+}
+
+/* ============================================================
+   KPI CARD
+   ============================================================ */
 
 function KpiCard({
   title,
@@ -896,6 +1611,7 @@ function KpiCard({
   icon,
   tone,
   change,
+  label,
   direction,
 }: {
   title: string;
@@ -909,32 +1625,53 @@ function KpiCard({
     | "purple"
     | "cyan";
   change: string;
-  direction: "up" | "down" | "none";
+  label: string;
+  direction:
+    | "up"
+    | "down"
+    | "none";
 }) {
   const tones = {
     green: {
-      card: "border-[#d7efe4] bg-[#f2fbf7]",
-      icon: "bg-[#d8f6e8] text-[#129665]",
+      card:
+        "border-[#d7eee4] bg-[#f3fbf7]",
+      icon:
+        "bg-[#ddf6e9] text-[#129866]",
     },
+
     blue: {
-      card: "border-[#d8e8fb] bg-[#f2f8ff]",
-      icon: "bg-[#dcecff] text-[#287ce0]",
+      card:
+        "border-[#d7e6f8] bg-[#f3f8ff]",
+      icon:
+        "bg-[#deedff] text-[#287ce0]",
     },
+
     yellow: {
-      card: "border-[#f6e5ba] bg-[#fffaf0]",
-      icon: "bg-[#ffedb9] text-[#d79400]",
+      card:
+        "border-[#f2e1b7] bg-[#fffbf1]",
+      icon:
+        "bg-[#ffedbd] text-[#d99500]",
     },
+
     red: {
-      card: "border-[#f5d5db] bg-[#fff5f6]",
-      icon: "bg-[#ffdce1] text-[#e82d49]",
+      card:
+        "border-[#f2d5da] bg-[#fff6f7]",
+      icon:
+        "bg-[#ffdde2] text-[#e73550]",
     },
+
     purple: {
-      card: "border-[#e4dbfb] bg-[#faf7ff]",
-      icon: "bg-[#e9ddff] text-[#6b46d8]",
+      card:
+        "border-[#e3dafa] bg-[#faf8ff]",
+      icon:
+        "bg-[#eadfff] text-[#7047d9]",
     },
+
     cyan: {
-      card: "border-[#d5e9f5] bg-[#f3faff]",
-      icon: "bg-[#d9edff] text-[#277fe1]",
+      card:
+        "border-[#d6e7f3] bg-[#f3faff]",
+      icon:
+        "bg-[#dcedff] text-[#287fe0]",
     },
   };
 
@@ -942,25 +1679,23 @@ function KpiCard({
 
   return (
     <div
-      className={`rounded-xl border p-4 transition hover:-translate-y-0.5 hover:shadow-md ${selected.card}`}
+      className={`min-h-[142px] rounded-xl border p-3.5 shadow-[0_2px_8px_rgba(20,50,40,0.025)] transition hover:-translate-y-0.5 hover:shadow-md ${selected.card}`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div
-          className={`flex h-10 w-10 items-center justify-center rounded-xl text-lg font-bold ${selected.icon}`}
-        >
-          {icon}
-        </div>
+      <div
+        className={`flex h-10 w-10 items-center justify-center rounded-xl text-lg font-bold ${selected.icon}`}
+      >
+        {icon}
       </div>
 
-      <p className="mt-3 text-xs font-medium text-[#607a71]">
+      <p className="mt-3 text-[10px] font-medium text-[#627b72]">
         {title}
       </p>
 
-      <p className="mt-1 text-2xl font-bold text-[#102d25]">
+      <p className="mt-1 text-[22px] font-bold tracking-tight text-[#102d25]">
         {value}
       </p>
 
-      <p className="mt-2 text-[9px] font-medium text-[#7d918a]">
+      <p className="mt-2 text-[8px] font-medium text-[#81948d]">
         {direction === "up" && (
           <span className="mr-1 font-bold text-[#15966a]">
             ↗
@@ -968,22 +1703,20 @@ function KpiCard({
         )}
 
         {direction === "down" && (
-          <span className="mr-1 font-bold text-[#e83d55]">
+          <span className="mr-1 font-bold text-[#e63d54]">
             ↘
           </span>
         )}
 
-        {change}
+        {change} {label}
       </p>
     </div>
   );
 }
 
-/*
- * =========================================================
- * SECTION
- * =========================================================
- */
+/* ============================================================
+   DASHBOARD SECTION
+   ============================================================ */
 
 function DashboardSection({
   title,
@@ -1019,17 +1752,17 @@ function DashboardSection({
   };
 
   return (
-    <div className="rounded-2xl border border-[#dfe9e5] bg-white p-4 shadow-[0_2px_10px_rgba(20,50,40,0.04)]">
+    <div className="rounded-2xl border border-[#dfe9e5] bg-white p-4 shadow-[0_2px_10px_rgba(20,50,40,0.035)]">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-start gap-3">
+        <div className="flex min-w-0 items-start gap-3">
           <div
             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-lg font-bold ${iconClasses[iconTone]}`}
           >
             {icon}
           </div>
 
-          <div>
-            <h2 className="text-sm font-bold text-[#132f27]">
+          <div className="min-w-0">
+            <h2 className="text-[14px] font-bold text-[#132f27]">
               {title}
             </h2>
 
@@ -1049,80 +1782,125 @@ function DashboardSection({
   );
 }
 
-/*
- * =========================================================
- * LEGEND
- * =========================================================
- */
+/* ============================================================
+   OPERATION METRIC
+   ============================================================ */
 
-function Legend({
-  label,
-  className,
-}: {
-  label: string;
-  className: string;
-}) {
-  return (
-    <span className="flex items-center gap-2 text-[#526d63]">
-      <span
-        className={`h-2.5 w-2.5 rounded-full ${className}`}
-      />
-
-      {label}
-    </span>
-  );
-}
-
-/*
- * =========================================================
- * MINI METRIC
- * =========================================================
- */
-
-function MiniMetric({
+function OperationMetric({
   label,
   value,
+  change,
   tone,
+  icon,
 }: {
   label: string;
   value: string;
-  tone: "green" | "blue" | "purple";
+  change: string;
+  tone:
+    | "green"
+    | "blue"
+    | "purple"
+    | "yellow";
+  icon: string;
 }) {
-  const tones = {
+  const classes = {
     green:
-      "border-[#d9eee5] bg-[#f8fcfa]",
+      "border-[#d8eee5] bg-[#f8fcfa] text-[#149669]",
     blue:
-      "border-[#dbe9f8] bg-[#f8fbff]",
+      "border-[#dbe9f8] bg-[#f8fbff] text-[#287ce0]",
     purple:
-      "border-[#e6def8] bg-[#fbf9ff]",
+      "border-[#e6def8] bg-[#fbf9ff] text-[#7047d9]",
+    yellow:
+      "border-[#f3e5bf] bg-[#fffdf6] text-[#cf9000]",
   };
 
   return (
     <div
-      className={`rounded-lg border p-3 ${tones[tone]}`}
+      className={`rounded-xl border p-3 ${classes[tone]}`}
     >
-      <p className="truncate text-[9px] text-[#7b9088]">
-        {label}
-      </p>
+      <div className="flex items-center gap-2">
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-sm shadow-sm">
+          {icon}
+        </span>
 
-      <p className="mt-1 text-sm font-bold text-[#16362c]">
+        <p className="truncate text-[9px] font-medium text-[#71877f]">
+          {label}
+        </p>
+      </div>
+
+      <p className="mt-2 text-[17px] font-bold text-[#152f27]">
         {value}
       </p>
 
-      <p className="mt-2 text-[8px] text-[#15966a]">
-        ↗ +0%
+      <p className="mt-1 text-[8px] font-semibold text-[#15966a]">
+        ↗ {change}
+        <span className="ml-1 font-normal text-[#8b9d96]">
+          vs previous 30 days
+        </span>
       </p>
     </div>
   );
 }
 
-/*
- * =========================================================
- * RECOMMENDATION ROW
- * =========================================================
- */
+/* ============================================================
+   RECOMMENDATION TAB
+   ============================================================ */
 
-function RecommendationRow({
+function RecommendationTab({
+  label,
+  count,
+  active = false,
+}: {
+  label: string;
+  count: number;
+  active?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className={`shrink-0 border-b-2 px-3 py-2 text-[10px] font-semibold ${
+        active
+          ? "border-[#7047e8] text-[#7047e8]"
+          : "border-transparent text-[#70857c]"
+      }`}
+    >
+      {label} ({count})
+    </button>
+  );
+}
+
+/* ============================================================
+   ALERT TAB
+   ============================================================ */
+
+function AlertTab({
+  label,
+  count,
+  active = false,
+}: {
+  label: string;
+  count: number;
+  active?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className={`shrink-0 rounded-full border px-3 py-1.5 text-[9px] font-semibold ${
+        active
+          ? "border-[#ffd5da] bg-[#ffe6e9] text-[#e73b51]"
+          : "border-[#e4ebe8] bg-white text-[#70857c]"
+      }`}
+    >
+      {label} ({count})
+    </button>
+  );
+}
+
+/* ============================================================
+   ADVANCED RECOMMENDATION
+   ============================================================ */
+
+function AdvancedRecommendationRow({
   productName,
   reason,
   stock,
@@ -1137,40 +1915,272 @@ function RecommendationRow({
   target: number;
   decision: string;
 }) {
+  const category =
+    getRecommendationCategory(
+      decision,
+      reason
+    );
+
+  const isOutOfStock =
+    stock <= 0;
+
+  const categoryStyle =
+    category === "Slow Moving"
+      ? "bg-[#edf2f5] text-[#536777]"
+      : category === "Overstock"
+      ? "bg-[#fff0df] text-[#d47719]"
+      : category === "Price"
+      ? "bg-[#eaf0ff] text-[#3869c8]"
+      : isOutOfStock
+      ? "bg-[#ffe2e5] text-[#e63d54]"
+      : "bg-[#fff0cc] text-[#c88a08]";
+
+  const icon =
+    category === "Slow Moving"
+      ? "◷"
+      : category === "Overstock"
+      ? "↘"
+      : category === "Price"
+      ? "₹"
+      : isOutOfStock
+      ? "!"
+      : "↗";
+
+  const badge =
+    category === "Restock"
+      ? isOutOfStock
+        ? "Out of Stock"
+        : "Low Stock"
+      : category;
+
+  const action =
+    isOutOfStock
+      ? "Restock"
+      : category === "Slow Moving"
+      ? "Review"
+      : category === "Overstock"
+      ? "Reduce Stock"
+      : category === "Price"
+      ? "Review"
+      : "Buy Now";
+
   return (
-    <div className="flex items-center gap-3 rounded-xl border border-[#e1e9e6] bg-white p-2.5">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#fff3dd] text-lg">
-        📦
-      </div>
-
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-bold text-[#19372e]">
-          {productName}
-        </p>
-
-        <p className="mt-0.5 truncate text-[10px] text-[#71867e]">
-          {reason}
-        </p>
-
-        <div className="mt-1.5 flex flex-wrap gap-3 text-[9px] text-[#61786f]">
-          <span>Stock: {stock}</span>
-          <span>Buy: {buy}</span>
-          <span>Target: {target}</span>
+    <div className="group rounded-xl border border-[#e2eae7] bg-white p-3 transition hover:border-[#d4e4de] hover:shadow-sm">
+      <div className="flex items-center gap-3">
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-lg font-bold ${
+            isOutOfStock
+              ? "bg-[#fff0d9] text-[#c27b12]"
+              : category === "Slow Moving"
+              ? "bg-[#edf5fb] text-[#4380b8]"
+              : category === "Overstock"
+              ? "bg-[#fff1e4] text-[#d47719]"
+              : "bg-[#edf8f3] text-[#1b9a6d]"
+          }`}
+        >
+          {icon}
         </div>
-      </div>
 
-      <span className="shrink-0 rounded-md bg-[#ffe1e4] px-3 py-1.5 text-[9px] font-bold text-[#e43d54]">
-        {decision || "BUY"}
-      </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate text-[11px] font-bold text-[#19372e]">
+              {productName}
+            </p>
+
+            <span
+              className={`rounded-full px-2 py-0.5 text-[8px] font-bold ${categoryStyle}`}
+            >
+              {badge}
+            </span>
+          </div>
+
+          <p className="mt-1 truncate text-[9px] text-[#71867e]">
+            {reason}
+          </p>
+
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[8px] text-[#61786f]">
+            <span>
+              Stock:{" "}
+              <b className="text-[#263f36]">
+                {stock}
+              </b>
+            </span>
+
+            <span>
+              Buy:{" "}
+              <b className="text-[#263f36]">
+                {buy}
+              </b>
+            </span>
+
+            <span>
+              Target:{" "}
+              <b className="text-[#263f36]">
+                {target}
+              </b>
+            </span>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className={`hidden shrink-0 rounded-lg px-4 py-2 text-[9px] font-bold sm:block ${
+            isOutOfStock
+              ? "bg-[#ffe2e5] text-[#e43d54]"
+              : "bg-[#eee7ff] text-[#6746d8]"
+          }`}
+        >
+          {action}
+        </button>
+
+        <button
+          type="button"
+          className="shrink-0 text-lg text-[#82958d] opacity-70 group-hover:opacity-100"
+          aria-label="More options"
+        >
+          ⋮
+        </button>
+      </div>
     </div>
   );
 }
 
-/*
- * =========================================================
- * QUICK ACTION
- * =========================================================
- */
+/* ============================================================
+   ADVANCED ALERT
+   ============================================================ */
+
+function AdvancedAlertRow({
+  productName,
+  message,
+  severity,
+  currentStock,
+  minimumStock,
+  createdAt,
+}: {
+  productName: string;
+  message: string;
+  severity: string;
+  currentStock: number;
+  minimumStock: number;
+  createdAt: Date;
+}) {
+  const category = getAlertCategory(
+    message,
+    severity,
+    currentStock,
+    minimumStock
+  );
+
+  const isOut =
+    currentStock <= 0;
+
+  const isLow =
+    currentStock > 0 &&
+    currentStock <= minimumStock;
+
+  const categoryStyle =
+    category === "Expiry"
+      ? "bg-[#fff0df] text-[#d86d13]"
+      : isOut
+      ? "bg-[#ffe1e5] text-[#e53c52]"
+      : isLow
+      ? "bg-[#fff1c9] text-[#c88a08]"
+      : "bg-[#e9f1ff] text-[#3c70ca]";
+
+  const action =
+    category === "Expiry"
+      ? "View"
+      : isOut
+      ? "Restock"
+      : isLow
+      ? "Buy Now"
+      : "View";
+
+  return (
+    <div className="group rounded-xl border border-[#e2eae7] bg-white p-3 transition hover:border-[#d6e4df] hover:shadow-sm">
+      <div className="flex items-center gap-3">
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-lg ${
+            category === "Expiry"
+              ? "bg-[#fff3e6]"
+              : isOut
+              ? "bg-[#fff0d9]"
+              : "bg-[#edf5fb]"
+          }`}
+        >
+          {category === "Expiry"
+            ? "◷"
+            : isOut
+            ? "📦"
+            : "⚠"}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="truncate text-[11px] font-bold text-[#19372e]">
+              {productName}
+            </p>
+
+            <span
+              className={`rounded-full px-2 py-0.5 text-[8px] font-bold ${categoryStyle}`}
+            >
+              {category}
+            </span>
+          </div>
+
+          <p className="mt-1 truncate text-[9px] text-[#71867e]">
+            {message}
+          </p>
+
+          <div className="mt-2 flex flex-wrap gap-x-4 text-[8px] text-[#61786f]">
+            <span>
+              Current:{" "}
+              <b className="text-[#263f36]">
+                {currentStock}
+              </b>
+            </span>
+
+            <span>
+              Minimum:{" "}
+              <b className="text-[#263f36]">
+                {minimumStock}
+              </b>
+            </span>
+
+            <span>
+              {formatTimeAgo(
+                createdAt
+              )}
+            </span>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className={`hidden shrink-0 rounded-lg px-4 py-2 text-[9px] font-bold sm:block ${
+            isOut
+              ? "bg-[#ffe2e5] text-[#e43d54]"
+              : "bg-[#eee7ff] text-[#6746d8]"
+          }`}
+        >
+          {action}
+        </button>
+
+        <button
+          type="button"
+          className="text-lg text-[#82958d]"
+          aria-label="More options"
+        >
+          ⋮
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   QUICK ACTION
+   ============================================================ */
 
 function QuickAction({
   href,
@@ -1188,32 +2198,36 @@ function QuickAction({
   return (
     <a
       href={href}
-      className={`rounded-xl p-3 text-white transition hover:-translate-y-0.5 hover:shadow-lg ${className}`}
+      className={`group rounded-xl p-3.5 text-white transition hover:-translate-y-0.5 hover:shadow-lg ${className}`}
     >
-      <div className="flex items-center gap-2">
-        <span className="text-xl font-light">
-          {icon}
-        </span>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <span className="text-xl font-light">
+            {icon}
+          </span>
 
-        <div>
-          <p className="text-xs font-bold">
-            {title}
-          </p>
+          <div>
+            <p className="text-xs font-bold">
+              {title}
+            </p>
 
-          <p className="mt-0.5 text-[9px] opacity-80">
-            {subtitle}
-          </p>
+            <p className="mt-0.5 text-[8px] opacity-80">
+              {subtitle}
+            </p>
+          </div>
         </div>
+
+        <span className="text-lg opacity-80 transition group-hover:translate-x-1">
+          →
+        </span>
       </div>
     </a>
   );
 }
 
-/*
- * =========================================================
- * EMPTY STATE
- * =========================================================
- */
+/* ============================================================
+   EMPTY STATE
+   ============================================================ */
 
 function EmptyState({
   text,
@@ -1224,5 +2238,20 @@ function EmptyState({
     <div className="rounded-xl border border-dashed border-[#d8e4df] bg-[#fbfdfc] p-8 text-center text-xs text-[#80948c]">
       {text}
     </div>
+  );
+}
+
+/* ============================================================
+   PERCENTAGE
+   ============================================================ */
+
+function getPercentage(
+  value: number,
+  total: number
+) {
+  if (!total) return 0;
+
+  return Math.round(
+    (value / total) * 100
   );
 }

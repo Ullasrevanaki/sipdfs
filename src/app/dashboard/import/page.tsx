@@ -999,15 +999,18 @@ function validateCsvRows(rows: CsvRow[]) {
     }
 
     const transactionType =
-      row.transaction_type
-        .trim()
-        .toUpperCase();
+  row.transaction_type
+    .trim()
+    .toUpperCase();
 
-    if (transactionType !== "SALE") {
-      errors.push(
-        `Row ${rowNumber}: transaction_type must be SALE for this import.`
-      );
-    }
+if (
+  transactionType !== "SALE" &&
+  transactionType !== "PURCHASE"
+) {
+  errors.push(
+    `Row ${rowNumber}: transaction_type must be SALE or PURCHASE.`
+  );
+}
   });
 
   if (errors.length > 0) {

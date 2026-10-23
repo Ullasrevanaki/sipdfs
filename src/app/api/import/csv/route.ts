@@ -200,12 +200,15 @@ export async function POST(request: Request) {
         );
       }
 
-      if (transactionType !== "SALE") {
+      if (
+        transactionType !== "SALE" &&
+        transactionType !== "PURCHASE"
+      ) {
         return NextResponse.json(
           {
             success: false,
             error:
-              `Row ${rowNumber}: transaction_type must be SALE.`,
+              `Row ${rowNumber}: transaction_type must be SALE or PURCHASE.`,
           },
           { status: 400 }
         );
@@ -213,18 +216,19 @@ export async function POST(request: Request) {
     }
 
     // ---------------------------------------------------------
-    // LOAD EXISTING PRODUCTS ONCE
+    // GET EXISTING PRODUCTS
     // ---------------------------------------------------------
 
-    const existingProducts = await prisma.product.findMany({
-      where: {
-        storeId,
-      },
-      select: {
-        id: true,
-        name: true,
-      },
-    });
+    const existingProducts =
+      await prisma.product.findMany({
+        where: {
+          storeId,
+        },
+        select: {
+          id: true,
+          name: true,
+        },
+      });
 
     const productMap = new Map<string, string>();
 
@@ -236,22 +240,44 @@ export async function POST(request: Request) {
     }
 
     // ---------------------------------------------------------
-    // CREATE MISSING PRODUCTS
+    // GET UNIQUE PRODUCTS FROM CSV
     // ---------------------------------------------------------
 
-    let productsCreated = 0;
-    let productsUpdated = 0;
+    const uniqueProducts = new Map<
+      string,
+      {
+        name: string;
+        category: string;
+        unit: string;
+        costPrice: number;
+        sellingPrice: number;
+      }
+    >();
 
     for (const row of rows) {
       const name = String(row.product_name).trim();
       const key = name.toLowerCase();
 
-      const category = String(row.category).trim();
-      const unit = String(row.unit).trim();
+      if (!uniqueProducts.has(key)) {
+        uniqueProducts.set(key, {
+          name,
+          category: String(row.category).trim(),
+          unit: String(row.unit).trim(),
+          costPrice: Number(row.cost_price),
+          sellingPrice: Number(row.selling_price),
+        });
+      }
+    }
 
-      const costPrice = Number(row.cost_price);
-      const sellingPrice = Number(row.selling_price);
+    // ---------------------------------------------------------
+    // CREATE / UPDATE PRODUCTS
+    // ONLY ONCE PER UNIQUE PRODUCT
+    // ---------------------------------------------------------
 
+    let productsCreated = 0;
+    let productsUpdated = 0;
+
+    for (const [key, productData] of uniqueProducts) {
       const existingProductId = productMap.get(key);
 
       if (existingProductId) {
@@ -260,41 +286,40 @@ export async function POST(request: Request) {
             id: existingProductId,
           },
           data: {
-            category,
-            unit,
-            costPrice,
-            sellingPrice,
+            category: productData.category,
+            unit: productData.unit,
+            costPrice: productData.costPrice,
+            sellingPrice: productData.sellingPrice,
           },
         });
 
         productsUpdated++;
-        continue;
+      } else {
+        const product =
+          await prisma.product.create({
+            data: {
+              storeId,
+              name: productData.name,
+              category: productData.category,
+              unit: productData.unit,
+              costPrice: productData.costPrice,
+              sellingPrice: productData.sellingPrice,
+
+              // Historical import does not directly
+              // change today's physical stock.
+              currentStock: 0,
+              minimumStock: 0,
+            },
+          });
+
+        productMap.set(key, product.id);
+
+        productsCreated++;
       }
-
-      const product = await prisma.product.create({
-        data: {
-          storeId,
-          name,
-          category,
-          unit,
-          costPrice,
-          sellingPrice,
-
-          // IMPORTANT:
-          // Historical sales must not change
-          // today's physical inventory.
-          currentStock: 0,
-
-          minimumStock: 0,
-        },
-      });
-
-      productMap.set(key, product.id);
-      productsCreated++;
     }
 
     // ---------------------------------------------------------
-    // PREPARE SALES TRANSACTIONS
+    // PREPARE ALL TRANSACTIONS
     // ---------------------------------------------------------
 
     const transactions = rows.map((row) => {
@@ -310,15 +335,41 @@ export async function POST(request: Request) {
         );
       }
 
+      const transactionType =
+        String(row.transaction_type)
+          .trim()
+          .toUpperCase();
+
+      const transactionDate = new Date(row.date);
+
       return {
         storeId,
         productId,
-        type: "SALE" as const,
+
+        type:
+          transactionType === "PURCHASE"
+            ? ("PURCHASE" as const)
+            : ("SALE" as const),
+
         quantity: Number(row.quantity),
+
         unit: String(row.unit).trim(),
+
         sellingPrice: Number(row.selling_price),
-        soldAt: new Date(row.date),
-        note: "Imported from CSV",
+
+        // IMPORTANT:
+        // Preserve historical CSV date.
+        createdAt: transactionDate,
+
+        soldAt:
+          transactionType === "SALE"
+            ? transactionDate
+            : null,
+
+        note:
+          transactionType === "PURCHASE"
+            ? "Imported purchase from CSV"
+            : "Imported sale from CSV",
       };
     });
 
@@ -332,22 +383,39 @@ export async function POST(request: Request) {
       });
 
     // ---------------------------------------------------------
+    // COUNTS
+    // ---------------------------------------------------------
+
+    const salesImported =
+      transactions.filter(
+        (transaction) =>
+          transaction.type === "SALE"
+      ).length;
+
+    const purchasesImported =
+      transactions.filter(
+        (transaction) =>
+          transaction.type === "PURCHASE"
+      ).length;
+
+    // ---------------------------------------------------------
     // SUCCESS
     // ---------------------------------------------------------
 
     return NextResponse.json({
       success: true,
-
       message: "CSV imported successfully.",
-
       importedRows: result.count,
-
+      salesImported,
+      purchasesImported,
       productsCreated,
-
       productsUpdated,
     });
   } catch (error) {
-    console.error("[CSV Import Error]", error);
+    console.error(
+      "[CSV Import Error]",
+      error
+    );
 
     return NextResponse.json(
       {
